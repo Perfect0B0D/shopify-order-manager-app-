@@ -11,7 +11,8 @@ from fetch_unfulfilled_orders import (
     create_item_subfolder,
     get_product_images_and_metafield,
     save_item_text,
-    fetch_all_products
+    fetch_all_products,
+    download_image
 )
 from pdf_builder import create_pdf
 
@@ -43,7 +44,7 @@ class OrderFetcher(QtCore.QObject):
         products_data = fetch_all_products()
 
         for index, order in enumerate(unfulfilled_orders):
-            print("order=================>",order)
+            print("order=================>",order["line_items"])
             order_id = order["order_number"]
             order_folder, created = create_order_folder(self.data_path, order_id)
 
@@ -69,22 +70,19 @@ class OrderFetcher(QtCore.QObject):
 
     def process_order_items(self, order, order_folder, products_data):
         # print("Order===========>", order)
-        for item in order["line_items"]:
+        index = 1
+        for  item in order["line_items"]:
             item_name = item["name"]
             product_id = item["product_id"]
             item_description = item["title"]
             item_quantity = item["quantity"]
             item_directory_name = ""
-            if item_quantity:
-                item_directory_name = item_name + f" - {item_quantity}" 
-
-            # Create a subfolder for the item
-            item_folder = create_item_subfolder(order_folder, item_directory_name)
-
-            # Save item text (title)
-            # save_item_text(item_folder, f"Product description: {item_description}")
-
+            
             properties_to_save = {
+                "radio-buttons-14": None,
+                "1b. Custom Design Upload-1": None,
+                "2b. Custom Design Upload-2": None,
+                "3b. Custom Design Upload-3": None,
                 "1. Box Designs": None,
                 "2. Gift ": None,
                 "Font": None,
@@ -101,7 +99,8 @@ class OrderFetcher(QtCore.QObject):
                 "Message" : None,
                 "upload1" : None,
                 "upload2" : None,
-                "upload3" : None
+                "upload3" : None,
+                "Shipping" : None
             }
 
             for prop in item["properties"]:
@@ -110,55 +109,95 @@ class OrderFetcher(QtCore.QObject):
 
                 if prop_name in properties_to_save:
                     properties_to_save[prop_name] = prop_value
-
-            if properties_to_save.get("1. Box Designs"):
-                # save_item_text(item_folder, f"\n1. Box Designs: {properties_to_save['1. Box Designs']}")
-                design_product_name = properties_to_save['1. Box Designs']
-
-                # Strip pricing info from the design product name
-                match = re.search(r'^(.*?)\s*\(\s*\+\$[\d,.]+\s*\)', design_product_name)
-                if match:
-                    design_product_name = match.group(1).strip()
-
-                # Find product directory in ./asset/products
-                product_directory = os.path.join("./asset/products", design_product_name)
-
-
-                if os.path.exists(product_directory):
-                    inner_image_path = os.path.join(product_directory, "inner.jpg")
-                    outer_image_path = os.path.join(product_directory, "outer.jpg")
-
-                    if not os.path.exists(inner_image_path):
-                        print(f"inner.png not found in {product_directory}")
-                        continue
-                    if not os.path.exists(outer_image_path):
-                        print(f"outer.png not found in {product_directory}")
-                        continue
-                else:
-                    print(f"Product directory '{design_product_name}' not found in ./asset/products")
-                    continue
-
-                # Collect user images (default to empty string if not provided)
-                user_custom_image = ["","",""] 
-                if properties_to_save["Pictures and/or Logo-1"]:
-                    user_custom_image[0] = properties_to_save["Pictures and/or Logo-1"]
-                if properties_to_save["Pictures and/or Logo-2"]:
-                    user_custom_image[1] = properties_to_save["Pictures and/or Logo-2"]
-                if properties_to_save["Pictures and/or Logo-3"]:
-                    user_custom_image[2] = properties_to_save["Pictures and/or Logo-3"]
-
-                # Additional properties
-                text_font = properties_to_save.get("Font","Questrial")
-                if text_font == "":
-                 text_font = "Questrial"
-                text_description = properties_to_save.get("Type your message here", "")
-
-                # Create PDF with customization
-                output_pdf = f"{item_folder}/product_customization.pdf"
-                create_pdf(output_pdf, outer_image_path, inner_image_path, user_custom_image,"", text_description,"", text_font)
-                # print(f"PDF created: {output_pdf}")
             
+            if properties_to_save.get("radio-buttons-14"):
+                if item_quantity:
+                 item_directory_name = f"#{index} - " + item_name + f" - {item_quantity }"
+                else:
+                 item_directory_name = f"#{index} - " + item_name
+                index += 1
+                item_folder = create_item_subfolder(order_folder, item_directory_name)
+                designOption = properties_to_save.get("radio-buttons-14")
+                if designOption == "Designed by you":
+                    save_item_text(item_folder, f"Designed by you. \n")
+                    if properties_to_save.get("1b. Custom Design Upload-1"):
+                     download_image(properties_to_save.get("1b. Custom Design Upload-1"),item_folder,"Custom Design-1.jpg")
+                    if properties_to_save.get("2b. Custom Design Upload-2"):
+                     download_image(properties_to_save.get("1b. Custom Design Upload-2"),item_folder,"Custom Design-2.jpg")
+                    if properties_to_save.get("3b. Custom Design Upload-3"):
+                     download_image(properties_to_save.get("3b. Custom Design Upload-3"),item_folder,"Custom Design-3.jpg")
+                    if properties_to_save.get("Pictures and/or Logo-1"):
+                     download_image(properties_to_save.get("Pictures and/or Logo-1"),item_folder,"Logo-1.jpg")
+                    if properties_to_save.get("Pictures and/or Logo-2"):
+                     download_image(properties_to_save.get("Pictures and/or Logo-2"),item_folder,"Logo-2.jpg")
+                    if properties_to_save.get("Pictures and/or Logo-3"):
+                     download_image(properties_to_save.get("Pictures and/or Logo-3"),item_folder,"Logo-3.jpg")
+                if "Designed for you" in designOption:
+                    save_item_text(item_folder, f"Designed for you, $50 added to invoice. \n")
+                    if properties_to_save.get("Pictures and/or Logo-1"):
+                     download_image(properties_to_save.get("Pictures and/or Logo-1"),item_folder,"Logo-1.jpg")
+                    if properties_to_save.get("Pictures and/or Logo-2"):
+                     download_image(properties_to_save.get("Pictures and/or Logo-2"),item_folder,"Logo-2.jpg")
+                    if properties_to_save.get("Pictures and/or Logo-3"):
+                     download_image(properties_to_save.get("Pictures and/or Logo-3"),item_folder,"Logo-3.jpg")
+                if designOption == "Choose from our designs":
+                    save_item_text(item_folder, f"Choose from our designs. \n")
+                    if properties_to_save.get("1. Box Designs"):
+                        
+                        design_product_name = properties_to_save['1. Box Designs']
+                        # Strip pricing info from the design product name
+                        match = re.search(r'^(.*?)\s*\(\s*\+\$[\d,.]+\s*\)', design_product_name)
+                        if match:
+                            design_product_name = match.group(1).strip()
+                        # Find product directory in ./asset/products
+                        product_directory = os.path.join("./asset/products", design_product_name)
+                        if os.path.exists(product_directory):
+                            inner_image_path = os.path.join(product_directory, "inner.jpg")
+                            outer_image_path = os.path.join(product_directory, "outer.jpg")
+
+                            if not os.path.exists(inner_image_path):
+                                print(f"inner.png not found in {product_directory}")
+                                continue
+                            if not os.path.exists(outer_image_path):
+                                print(f"outer.png not found in {product_directory}")
+                                continue
+                        else:
+                            print(f"Product directory '{design_product_name}' not found in ./asset/products")
+                            continue
+                        # Collect user images (default to empty string if not provided)
+                        user_custom_image = ["","",""] 
+                        if properties_to_save["Pictures and/or Logo-1"]:
+                            user_custom_image[0] = properties_to_save["Pictures and/or Logo-1"]
+                        if properties_to_save["Pictures and/or Logo-2"]:
+                            user_custom_image[1] = properties_to_save["Pictures and/or Logo-2"]
+                        if properties_to_save["Pictures and/or Logo-3"]:
+                            user_custom_image[2] = properties_to_save["Pictures and/or Logo-3"]
+
+                        # Additional properties
+                        text_font = properties_to_save.get("Font","Questrial")
+                        if text_font == "":
+                         text_font = "Questrial"
+                        text_description = properties_to_save.get("Type your message here", "")
+
+                        # Create PDF with customization
+                        output_pdf = f"{item_folder}/product_customization.pdf"
+                        create_pdf(output_pdf, outer_image_path, inner_image_path, user_custom_image,"", text_description,"", text_font)
+                        # print(f"PDF created: {output_pdf}")
+                
+                save_item_text(item_folder, f"requires_shipping: {item['requires_shipping']} \n")
+                save_item_text(item_folder, f"Font: {properties_to_save.get('Font')} \n")
+                save_item_text(item_folder, f"Message: {properties_to_save.get('Type your message here')} \n")
+                save_item_text(item_folder, f"Shipping: {properties_to_save.get('Shipping')} \n")
+                save_item_text(item_folder, f"Gift: {properties_to_save.get('2. Gift ')} \n")
+                
+
             if properties_to_save.get("Print"):
+                if item_quantity:
+                 item_directory_name = f"#{index} - " + item_name + f" - {item_quantity }"
+                else:
+                 item_directory_name = f"#{index} - " + item_name
+                index += 1
+                item_folder = create_item_subfolder(order_folder, item_directory_name)
                 design_product_name = item_name
                 # Strip pricing info from the design product name
                 match = re.search(r'^(.*?)\s*\(\s*\+\$[\d,.]+\s*\)', design_product_name)
@@ -200,7 +239,15 @@ class OrderFetcher(QtCore.QObject):
                 text_to = properties_to_save.get("To", "")
                 text_from = properties_to_save.get("From", "")
                 gift = properties_to_save.get("Gift","")
-
+                
+                save_item_text(item_folder, f"requires_shipping: {item['requires_shipping']} \n")
+                save_item_text(item_folder, f"Font: {properties_to_save.get('font')} \n")
+                save_item_text(item_folder, f"Shipping: {properties_to_save.get('Shipping')} \n")
+                save_item_text(item_folder, f"Gift: {properties_to_save.get('Gift')} \n")
+                save_item_text(item_folder, f"Message: {properties_to_save.get('Message', '')} \n")
+                save_item_text(item_folder, f"To: {properties_to_save.get('To', '')} \n")
+                save_item_text(item_folder, f"From: {properties_to_save.get('From', '')} \n")
+                
                 # Create PDF with customization
                 output_pdf = f"{item_folder}/product_customization.pdf"
                 create_pdf(output_pdf, outer_image_path, inner_image_path, user_custom_image,text_to, text_description, text_from, text_font)
@@ -217,10 +264,10 @@ class MainWindow(QtWidgets.QDialog):
 
         self.config_manager = ConfigManager()
         self.data_path = self.config_manager.get_order_data_directory()
-        if self.data_path == "":
+        if self.data_path == "" or not os.path.exists(self.data_path):
             self.config_manager.initialize_config()
-            self.data_path = self.config_manager.get_order_data_directory()
-        self.temp_data_path = self.config_manager.get_order_data_directory()
+            self.data_path = os.path.join(os.getcwd(), 'OrderData')
+        self.temp_data_path = self.data_path
         self.last_order_num = self.config_manager.get_last_saved_order_number()
         self.new_ordered_num = 0
         self.is_fetching = False
@@ -290,6 +337,8 @@ class MainWindow(QtWidgets.QDialog):
         self.cancelBtn.setEnabled(False)
 
     def start_order_fetching(self):
+        if self.data_path != self.temp_data_path:
+            self.save_setting_data()
         self.getOrderBtn.setText("")
         self.selectDirectoryBtn.setEnabled(False)
         self.is_fetching = True
