@@ -79,7 +79,7 @@ def save_item_text(folder, text_content):
     try:
         with open(text_file_path, 'a') as text_file:
             text_file.write(text_content)
-        print(f"Item text saved: {text_file_path}")
+        # print(f"Item text saved: {text_file_path}")
     except OSError as e:
         print(f"Error saving item text: {e}")
 

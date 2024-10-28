@@ -39,7 +39,6 @@ def ensure_font_available(font_name):
         if not os.path.exists(font_path):
             download_and_register_font(font_name, font_url, font_path)
         else:
-            print("fontname======>", font_name)
             pdfmetrics.registerFont(TTFont(font_name, font_path))
 
 def draw_exact_registration_marks(c, padding=35, line_length=24, circle_radius=7):
