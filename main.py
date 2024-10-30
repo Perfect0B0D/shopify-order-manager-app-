@@ -44,8 +44,10 @@ class OrderFetcher(QtCore.QObject):
         products_data = fetch_all_products()
 
         for index, order in enumerate(unfulfilled_orders):
-            print("order=================>",order["line_items"])
+            # print("order=================>",order["line_items"])
             order_id = order["order_number"]
+            # if order_id < 1080:
+            #     continue
             order_folder, created = create_order_folder(self.data_path, order_id)
 
             if not created:

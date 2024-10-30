@@ -1,19 +1,20 @@
 import os
+import re
 import requests
-from PIL import Image
-from io import BytesIO
+from io import BytesIO  
+from PIL import Image, ImageFont
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase import pdfmetrics
 from reportlab.lib.utils import ImageReader
-from reportlab.platypus import Paragraph
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.colors import red, black, white
+from emojipy import Emoji
 
 # Conversion: 1 inch = 72 points
-# Custom page size in points: 19.5 inches by 13.5 inches
-PAGE_WIDTH = 19 * 72  # 19.5 inches converted to points
-PAGE_HEIGHT = 13 * 72  # 13.5 inches converted to points
+
+PAGE_WIDTH = 19 * 72  
+PAGE_HEIGHT = 13 * 72  
+Right_IMG_POS = 1.5 * 72
 
 FONT_DIR = "./asset/font/"
 
@@ -24,9 +25,101 @@ def download_and_register_font(font_name, font_url, font_path):
         response = requests.get(font_url)
         with open(font_path, 'wb') as f:
             f.write(response.content)
-    
+
     # Register the downloaded font
     pdfmetrics.registerFont(TTFont(font_name, font_path))
+    
+def replace_with_emoji_pdf(text, size):
+    # Convert text to image HTML for emojis
+    text = Emoji.to_image(text)
+
+    # Remove unsupported attributes: class, style, and alt
+    text = re.sub(r'\s*class="[^"]*"', '', text)  # Remove class attributes
+    text = re.sub(r'\s*style="[^"]*"', '', text)  # Remove style attributes
+    text = re.sub(r'\s*alt="[^"]*"', '', text)    # Remove alt attributes
+    
+    # Replace the remaining attributes with height and width
+    text = re.sub(r'<img', f'<img height="{size}" width="{size}"', text)
+    
+    return text
+
+def draw_mixed_text(c, text, x, y, font, font_size, max_width):
+    """Draw text and emojis with line wrapping, including handling line breaks."""
+    # Split text into segments of text and emojis, including line breaks
+    segments = re.split(r'([\U0001F600-\U0001F64F]|[\r\n])', text)  # Regex to match emoji range and line breaks
+    current_x = x
+    current_y = y
+    line_height = font_size + 2  # Adjust line height for better spacing
+    line = ""  # Current line being constructed
+
+    for segment in segments:
+        if segment:  # Non-empty segment
+            if segment in ['\r', '\n']:  # Handle line breaks
+                # Draw the current line if there's any text to draw
+                if line:
+                    c.setFont(font, font_size)
+                    c.drawString(x + Right_IMG_POS, current_y, line)  # Draw the current line
+                    current_y -= line_height  # Move down for the next line
+                    line = ""  # Reset the current line
+                continue  # Move to the next segment
+
+            if re.match(r'[\U0001F600-\U0001F64F]', segment):  # If it's an emoji
+                emoji_width = font_size  # Width of the emoji
+
+                # Check if adding the emoji exceeds the max width
+                if stringWidth(line + segment + " ", font, font_size) > max_width:
+                    # Draw the current line and start a new one
+                    c.setFont(font, font_size)
+                    c.drawString(x + Right_IMG_POS, current_y, line)  # Draw the current line
+                    current_y -= line_height  # Move down for the next line
+                    line = ""  # Reset the current line
+
+                # Fetch and draw the emoji image
+                emoji_image_html = replace_with_emoji_pdf(segment, 64)
+                img_src = re.search(r'src="([^"]+)"', emoji_image_html)
+                if img_src:
+                    emoji_url = img_src.group(1)
+                    emoji_img = fetch_image(emoji_url)  # Fetch the emoji image
+                    if emoji_img.mode != 'RGBA':
+                        emoji_img = emoji_img.convert('RGBA')
+                    emoji_img = emoji_img.resize((font_size, font_size), Image.Resampling.LANCZOS)
+                    
+                    img_reader = ImageReader(emoji_img)
+                    emoji_y_position = current_y - (font_size * 0.15)  # Adjust for vertical alignment
+                    c.drawImage(img_reader, current_x + Right_IMG_POS, emoji_y_position, width=font_size, height=font_size, mask='auto')
+                    current_x += emoji_width  # Move x position for the next emoji
+
+            else:
+                # Check if adding the new segment exceeds the width
+                test_line = line + segment + " "
+                if stringWidth(test_line, font, font_size) <= max_width:
+                    line = test_line  # Add to the current line
+                else:
+                    # Draw the current line and start a new one
+                    c.setFont(font, font_size)
+                    c.drawString(x + Right_IMG_POS, current_y, line)  # Draw the current line
+                    current_y -= line_height  # Move down for the next line
+                    line = segment + " "  # Start a new line with the current segment
+
+                    # Check if the new segment alone is wider than max_width
+                    if stringWidth(line, font, font_size) > max_width:
+                        # If the segment itself exceeds max_width, draw it separately
+                        while len(line) > 0:
+                            current_segment = line
+                            while stringWidth(current_segment, font, font_size) > max_width:
+                                current_segment = current_segment[:-1]  # Trim one character
+                            c.setFont(font, font_size)
+                            c.drawString(x + Right_IMG_POS, current_y, current_segment)  # Draw the trimmed segment
+                            current_y -= line_height  # Move down for the next line
+                            line = line[len(current_segment):]  # Remove drawn segment from the line
+
+                current_x += stringWidth(segment + " ", font, font_size)  # Update current_x for text
+
+    # Draw the last line if there's any remaining text
+    if line:
+        c.setFont(font, font_size)
+        c.drawString(x + Right_IMG_POS, current_y, line)
+
 
 def ensure_font_available(font_name):
     """Check if a font is registered locally or download and register it."""
@@ -51,22 +144,22 @@ def draw_exact_registration_marks(c, padding=35, line_length=24, circle_radius=7
     ]
 
     for x, y in mark_positions:
-        c.setStrokeColor(black)
-        c.setFillColor(black)
+        c.setStrokeColor('black')
+        c.setFillColor('black')
         c.circle(x, y, circle_radius, fill=1)
-        c.setStrokeColor(red)
+        c.setStrokeColor('red')
         if y > padding and x == padding:
             c.line(x - padding, y-line_length, x + line_length, y-line_length)
-            c.line(x+line_length, y + padding, x+line_length, y - line_length)
+            c.line(x + line_length, y + padding, x + line_length, y - line_length)
         if y > padding and x > padding:
             c.line(x + padding, y-line_length, x - line_length, y-line_length)
             c.line(x-line_length, y + padding, x-line_length, y - line_length)
         if y == padding and x == padding:
-            c.line(x - padding, y+line_length, x + line_length, y+line_length)
-            c.line(x+line_length, y + line_length, x+line_length, y - padding)
+            c.line(x - padding, y + line_length, x + line_length, y + line_length)
+            c.line(x + line_length, y + line_length, x + line_length, y - padding)
         if y == padding and x > padding:
-            c.line(x -  line_length, y+line_length, x + padding, y+line_length)
-            c.line(x-line_length, y - padding, x-line_length, y + line_length)
+            c.line(x - line_length, y + line_length, x + padding, y + line_length)
+            c.line(x - line_length, y - padding, x - line_length, y + line_length)
 
 def fetch_image(url):
     """Fetch image from URL and return a PIL Image object."""
@@ -91,10 +184,11 @@ def add_image_to_canvas(c, img_path, x, y, width, height, target_dpi=300):
 
     # Embed the higher-resolution image into the PDF
     img_reader = ImageReader(img)
-    c.drawImage(img_reader, x, y, width=width, height=height, mask='auto')    
+    c.drawImage(img_reader, x + Right_IMG_POS, y, width=width, height=height, mask='auto')
 
-def create_pdf(output_filename, outer_image_path, inner_image_path, user_custom_image,text_to="", text_description ="", text_from="", font="Helvetica", font_size=23):
+def create_pdf(output_filename, outer_image_path, inner_image_path, user_custom_image, text_to="", text_description="", text_from="", font="Helvetica", font_size=18):
     ensure_font_available(font)
+    ensure_font_available("Symbola")
     c = canvas.Canvas(output_filename, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
     
     # --------- First Page (Outer Image) ---------
@@ -105,8 +199,8 @@ def create_pdf(output_filename, outer_image_path, inner_image_path, user_custom_
     
     c.showPage()  # New page
 
-    # --------- Second Page (Inner Image and Custom Images) ---------
-    draw_exact_registration_marks(c)  # Draw registration marks
+    # # --------- Second Page (Inner Image and Custom Images) ---------
+    # draw_exact_registration_marks(c)  # Draw registration marks
 
     if inner_image_path:
         add_image_to_canvas(c, inner_image_path, x=0, y=0, width=PAGE_WIDTH, height=PAGE_HEIGHT)
@@ -138,30 +232,19 @@ def create_pdf(output_filename, outer_image_path, inner_image_path, user_custom_
             paste_x = (max_width - new_width) // 2
             paste_y = (max_height - new_height) // 2
             final_img.paste(resized_img, (paste_x, paste_y))
-            c.drawImage(ImageReader(final_img), x, y, width=max_width, height=max_height)
+            c.drawImage(ImageReader(final_img), x + Right_IMG_POS, y, width=max_width, height=max_height)
 
     # -------- Text between columns --------
     text_x = column_x_positions[0]
     text_y = row_y_positions[1]
-    text_max_width = 430
-    styles = getSampleStyleSheet()
-    style = styles["BodyText"]
-    style.fontName = font
-    style.fontSize = font_size
+    text_max_width = 420
+
     if text_to:
-        c.setFont(font, font_size)
-        c.drawString(text_x, text_y + 155, text_to)
-
-    # Render 'text_description' in the center
+        draw_mixed_text(c, text_to, text_x, text_y + 168, font, font_size, text_max_width)
     if text_description:
-        paragraph = Paragraph(text_description, style)
-        width, height = paragraph.wrap(text_max_width, image_height[1])
-        paragraph.drawOn(c, text_x, text_y + 120)
-
-    # Render 'text_from' at the bottom
+        draw_mixed_text(c, text_description, text_x, text_y + 145, font, font_size, text_max_width)
     if text_from:
-        c.setFont(font, font_size)
-        c.drawString(text_x, text_y + 20, text_from)
+        draw_mixed_text(c, text_from, text_x, text_y + 5, font, font_size, text_max_width)
 
-    draw_exact_registration_marks(c)
+    c.showPage()
     c.save()

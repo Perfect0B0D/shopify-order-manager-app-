@@ -77,7 +77,7 @@ def download_image(image_url, folder, filename=None):
 def save_item_text(folder, text_content):
     text_file_path = os.path.join(folder, "order_data.txt")
     try:
-        with open(text_file_path, 'a') as text_file:
+        with open(text_file_path, 'a', encoding='utf-8') as text_file:
             text_file.write(text_content)
         # print(f"Item text saved: {text_file_path}")
     except OSError as e:
@@ -139,6 +139,29 @@ def get_product_images_and_metafield(product_name, products):
     except requests.exceptions.RequestException as e:
         print(f"Error fetching product images for '{product_name}': {e}")
         return None, []
+
+def get_product_images(product_name, products):
+
+    headers = {
+        "X-Shopify-Access-Token": ACCESS_TOKEN,
+        "Content-Type": "application/json"
+    }
+
+    product = next((p for p in products if p["title"].strip().lower() == product_name.strip().lower()), None)
+    if not product:
+        print(f"No product found with the name: {product_name}")
+        return None, []
+    
+    try:
+        # Fetch product images
+        product_images = product.get("images", [])
+
+        return product_images
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching product images for '{product_name}': {e}")
+        return None, []
+
 
 def get_product_image_url(product_id):
     url = f"{SHOPIFY_STORE_URL}/admin/api/2023-04/products/{product_id}.json"
