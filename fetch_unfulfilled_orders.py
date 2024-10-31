@@ -16,8 +16,7 @@ HEADERS = {
 }
 
 def get_unfulfilled_orders():
-    url = f"{SHOPIFY_STORE_URL}/admin/api/2023-04/orders.json?fulfillment_status=unfulfilled"
-    
+    url = f"{SHOPIFY_STORE_URL}/admin/api/2024-10/orders.json?fulfillment_status=unfulfilled"   
     try:
         
         response = requests.get(url, headers=HEADERS)
@@ -32,6 +31,65 @@ def get_unfulfilled_orders():
     except requests.exceptions.RequestException as e:
         print(f"Error fetching unfulfilled orders: {e}")
         return []
+  
+def get_fulfillment_order(order_id):
+    try:
+        url = f"{SHOPIFY_STORE_URL}/admin/api/2023-04/orders/{order_id}/fulfillment_orders.json"
+        response = requests.get(url, headers=HEADERS)
+        response.raise_for_status()
+        fulfillment_order = response.json().get("fulfillment_orders", [])
+        if fulfillment_order:
+            return fulfillment_order[0]  # Assuming we use the first fulfillment order
+        else:
+            print("No fulfillment orders found for this order.")
+            return None
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching fulfillment order: {e}")
+        if response is not None:
+            print(f"Response: {response.text}")  # Print full response for debugging
+        return None
+
+def create_fulfillment(order_id):
+    fulfillment_order = get_fulfillment_order(order_id)
+    if not fulfillment_order:
+        print("Unable to proceed without a valid fulfillment order.")
+        return
+    
+    # Extract fulfillment order ID and line items
+    fulfillment_order_id = fulfillment_order["id"]
+    fulfillment_line_items = [
+        {
+            "id": item["id"],
+            "quantity": item["quantity"]
+        }
+        for item in fulfillment_order["line_items"]
+    ]
+
+    # Define fulfillment payload for the fulfillment/createV2 endpoint
+    payload = {
+        "fulfillment": {
+            "message": f"Delivery status:",
+            "notify_customer": True,
+            "line_items_by_fulfillment_order": [
+                {
+                    "fulfillment_order_id": fulfillment_order_id,
+                    "fulfillment_order_line_items": fulfillment_line_items
+                }
+            ]
+        }
+    }
+
+    # Send the POST request to create the fulfillment
+    try:
+        url = f"{SHOPIFY_STORE_URL}/admin/api/2023-04/fulfillments.json"
+        response = requests.post(url, headers=HEADERS, json=payload)
+        response.raise_for_status()
+        print("Fulfillment created successfully.")
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Error creating fulfillment: {e}")
+        print(response.text)  # Print full response for debugging
+
 
 def create_order_folder(base_dir, order_id):
     order_folder = os.path.join(base_dir, f"#{order_id}")

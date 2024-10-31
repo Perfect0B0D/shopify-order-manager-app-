@@ -4,15 +4,13 @@ import re
 from PyQt5 import QtWidgets, uic, QtGui, QtCore
 from PyQt5.QtWidgets import QFileDialog
 from config_manager import ConfigManager  # Import the ConfigManager class
+from datetime import datetime
 
 from fetch_unfulfilled_orders import (
     get_unfulfilled_orders,
-    create_order_folder,
     create_item_subfolder,
-    get_product_images_and_metafield,
-    save_item_text,
-    fetch_all_products,
-    download_image
+    download_image,
+    create_fulfillment
 )
 from pdf_builder import create_pdf
 
@@ -22,6 +20,7 @@ class OrderFetcher(QtCore.QObject):
     updateLastSavedOrder = QtCore.pyqtSignal(int)
     finished = QtCore.pyqtSignal()
     message = QtCore.pyqtSignal(str)
+    errorMessage = QtCore.pyqtSignal(str)
 
     def __init__(self, data_path, last_order_num):
         super().__init__()
@@ -41,18 +40,24 @@ class OrderFetcher(QtCore.QObject):
 
         self.progress.emit(0, total_orders, f"Processing 0 of {total_orders} orders")
 
-        products_data = fetch_all_products()
-
+        # products_data = fetch_all_products()
+        
+        if total_orders > 0:
+            current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        
+        current_order_data_folder = os.path.join(self.data_path, current_time)
+        os.makedirs(current_order_data_folder, exist_ok=True)
+        
         for index, order in enumerate(unfulfilled_orders):
             # print("order=================>",order["line_items"])
             order_id = order["order_number"]
-            # if order_id < 1080:
-            #     continue
-            order_folder, created = create_order_folder(self.data_path, order_id)
+            # order_folder, created = create_order_folder(self.data_path, order_id)
 
-            if not created:
-                print(f"Order folder for #{order_id} already exists.")
-                continue
+            # if not created:
+            #     print(f"Order folder for #{order_id} already exists.")
+            #     continue
+            # if order_id < 1081:
+            #     continue
 
             if order_id > self.last_order_num:
                 self.last_order_num = order_id  # Update last order number
@@ -61,7 +66,8 @@ class OrderFetcher(QtCore.QObject):
              # Update progress bar
             self.progress.emit(index + 1, 0, f"Processing {index + 1} of {total_orders} orders")
 
-            self.process_order_items(order, order_folder, products_data)
+            self.process_order_items(order, current_order_data_folder)
+           
 
            
 
@@ -70,15 +76,17 @@ class OrderFetcher(QtCore.QObject):
         self.message.emit(f"{total_orders} Orders have been successfully fetched and saved.")
         self.finished.emit()
 
-    def process_order_items(self, order, order_folder, products_data):
+    def process_order_items(self, order, order_folder):
         # print("Order===========>", order)
+        fulfillment_flag = True
+        order_num = order["order_number"]
+        order_id = order["id"]
         index = 1
         for  item in order["line_items"]:
             item_name = item["name"]
-            product_id = item["product_id"]
-            item_description = item["title"]
+            # product_id = item["product_id"]
+            # item_description = item["title"]
             item_quantity = item["quantity"]
-            item_directory_name = ""
             
             properties_to_save = {
                 "radio-buttons-14": None,
@@ -113,15 +121,16 @@ class OrderFetcher(QtCore.QObject):
                     properties_to_save[prop_name] = prop_value
             
             if properties_to_save.get("radio-buttons-14"):
-                if item_quantity:
-                 item_directory_name = f"#{index} - " + item_name + f" - {item_quantity }"
-                else:
-                 item_directory_name = f"#{index} - " + item_name
-                index += 1
-                item_folder = create_item_subfolder(order_folder, item_directory_name)
+                # if item_quantity:
+                #  item_directory_name = f"#{index} - " + item_name + f" - {item_quantity }"
+                # else:
+                #  item_directory_name = f"#{index} - " + item_name
+                # item_folder = create_item_subfolder(order_folder, item_directory_name)
+                gift = properties_to_save.get("2. Gift ", "")
                 designOption = properties_to_save.get("radio-buttons-14")
                 if designOption == "Designed by you":
-                    save_item_text(item_folder, f"Designed by you. \n")
+                    item_folder = create_item_subfolder(order_folder, f"#{order_num}__{index}-{item_quantity}-(designed by you)" )
+                    # save_item_text(item_folder, f"Designed by you. \n")
                     if properties_to_save.get("1b. Custom Design Upload-1"):
                      download_image(properties_to_save.get("1b. Custom Design Upload-1"),item_folder,"Custom Design-1.jpg")
                     if properties_to_save.get("2b. Custom Design Upload-2"):
@@ -135,7 +144,8 @@ class OrderFetcher(QtCore.QObject):
                     if properties_to_save.get("Pictures and/or Logo-3"):
                      download_image(properties_to_save.get("Pictures and/or Logo-3"),item_folder,"Logo-3.jpg")
                 if "Designed for you" in designOption:
-                    save_item_text(item_folder, f"Designed for you, $50 added to invoice. \n")
+                    item_folder = create_item_subfolder(order_folder, f"#{order_num}__{index}-{item_quantity}-(designed for you)" )
+                    # save_item_text(item_folder, f"Designed for you, $50 added to invoice. \n")
                     if properties_to_save.get("Pictures and/or Logo-1"):
                      download_image(properties_to_save.get("Pictures and/or Logo-1"),item_folder,"Logo-1.jpg")
                     if properties_to_save.get("Pictures and/or Logo-2"):
@@ -143,7 +153,7 @@ class OrderFetcher(QtCore.QObject):
                     if properties_to_save.get("Pictures and/or Logo-3"):
                      download_image(properties_to_save.get("Pictures and/or Logo-3"),item_folder,"Logo-3.jpg")
                 if designOption == "Choose from our designs":
-                    save_item_text(item_folder, f"Choose from our designs. \n")
+                    # save_item_text(item_folder, f"Choose from our designs. \n")
                     if properties_to_save.get("1. Box Designs"):
                         
                         design_product_name = properties_to_save['1. Box Designs']
@@ -158,13 +168,16 @@ class OrderFetcher(QtCore.QObject):
                             outer_image_path = os.path.join(product_directory, "outer.jpg")
 
                             if not os.path.exists(inner_image_path):
-                                print(f"inner.png not found in {product_directory}")
+                                self.errorMessage.emit(f"inner.png not found in {product_directory}")
+                                fulfillment_flag = False
                                 continue
                             if not os.path.exists(outer_image_path):
-                                print(f"outer.png not found in {product_directory}")
+                                self.errorMessage.emit(f"outer.png not found in {product_directory}")
+                                fulfillment_flag = False
                                 continue
                         else:
-                            print(f"Product directory '{design_product_name}' not found in ./asset/products")
+                            self.errorMessage.emit(f"Product directory '{design_product_name}' not found in ./asset/products")
+                            fulfillment_flag = False
                             continue
                         # Collect user images (default to empty string if not provided)
                         user_custom_image = ["","",""] 
@@ -178,28 +191,33 @@ class OrderFetcher(QtCore.QObject):
                         # Additional properties
                         text_font = properties_to_save.get("Font","Questrial")
                         if text_font == "":
-                         text_font = "Questrial"
+                            text_font = "Questrial"
+                        font_path = f'./asset/font/{text_font}/{text_font}.ttf'
+                        if not os.path.exists(font_path):
+                         self.errorMessage.emit(f"{font_path} does not exist in {order_num}-{index} order")
+                         fulfillment_flag = False
+                         continue
                         text_description = properties_to_save.get("Type your message here", "")
 
                         # Create PDF with customization
-                        output_pdf = f"{item_folder}/product_customization.pdf"
-                        create_pdf(output_pdf, outer_image_path, inner_image_path, user_custom_image,"", text_description,"", text_font)
+                        output_pdf = f"{order_folder}/#{order_num}__{index}-{item_quantity}.pdf"
+                        create_pdf(order_num, gift, output_pdf, outer_image_path, inner_image_path, user_custom_image,"", text_description,"", text_font)
                         # print(f"PDF created: {output_pdf}")
-                
-                save_item_text(item_folder, f"requires_shipping: {item['requires_shipping']} \n")
-                save_item_text(item_folder, f"Font: {properties_to_save.get('Font')} \n")
-                save_item_text(item_folder, f"Message: {properties_to_save.get('Type your message here')} \n")
-                save_item_text(item_folder, f"Shipping: {properties_to_save.get('Shipping')} \n")
-                save_item_text(item_folder, f"Gift: {properties_to_save.get('2. Gift ')} \n")
+                index += 1
+                # save_item_text(item_folder, f"requires_shipping: {item['requires_shipping']} \n")
+                # save_item_text(item_folder, f"Font: {properties_to_save.get('Font')} \n")
+                # save_item_text(item_folder, f"Message: {properties_to_save.get('Type your message here')} \n")
+                # save_item_text(item_folder, f"Shipping: {properties_to_save.get('Shipping')} \n")
+                # save_item_text(item_folder, f"Gift: {properties_to_save.get('2. Gift ')} \n")
                 
 
             if properties_to_save.get("Print"):
-                if item_quantity:
-                 item_directory_name = f"#{index} - " + item_name + f" - {item_quantity }"
-                else:
-                 item_directory_name = f"#{index} - " + item_name
-                index += 1
-                item_folder = create_item_subfolder(order_folder, item_directory_name)
+                # if item_quantity:
+                #  item_directory_name = f"#{index} - " + item_name + f" - {item_quantity }"
+                # else:
+                #  item_directory_name = f"#{index} - " + item_name
+                # index += 1
+                # item_folder = create_item_subfolder(order_folder, item_directory_name)
                 design_product_name = item_name
                 # Strip pricing info from the design product name
                 match = re.search(r'^(.*?)\s*\(\s*\+\$[\d,.]+\s*\)', design_product_name)
@@ -215,13 +233,16 @@ class OrderFetcher(QtCore.QObject):
                     outer_image_path = os.path.join(product_directory, "outer.jpg")
 
                     if not os.path.exists(inner_image_path):
-                        print(f"inner.png not found in {product_directory}")
+                        self.errorMessage.emit(f"inner.png not found in {product_directory}")
+                        fulfillment_flag = False
                         continue
                     if not os.path.exists(outer_image_path):
-                        print(f"outer.png not found in {product_directory}")
+                        self.errorMessage.emit(f"outer.png not found in {product_directory}")
+                        fulfillment_flag = False
                         continue
                 else:
-                    print(f"Product directory '{design_product_name}' not found in ./asset/products")
+                    self.errorMessage.emit(f"Product directory '{design_product_name}' not found in ./asset/products")
+                    fulfillment_flag = False
                     continue
 
                 # Collect user images (default to empty string if not provided)
@@ -236,25 +257,36 @@ class OrderFetcher(QtCore.QObject):
                 # Additional properties
                 text_font = properties_to_save.get("font", "Questrial")
                 if text_font == "":
-                 text_font = "Questrial"
+                     text_font = "Questrial"
+                font_path = f'./asset/font/{text_font}/{text_font}.ttf'
+                if not os.path.exists(font_path):
+                    self.errorMessage.emit(f"{font_path} does not exist in {order_num}-{index} order")
+                    fulfillment_flag = False
+                    continue
+                
                 text_description = properties_to_save.get("Message", "")
                 text_to = properties_to_save.get("To", "")
                 text_from = properties_to_save.get("From", "")
                 gift = properties_to_save.get("Gift","")
                 
-                save_item_text(item_folder, f"requires_shipping: {item['requires_shipping']} \n")
-                save_item_text(item_folder, f"Font: {properties_to_save.get('font')} \n")
-                save_item_text(item_folder, f"Shipping: {properties_to_save.get('Shipping')} \n")
-                save_item_text(item_folder, f"Gift: {properties_to_save.get('Gift')} \n")
-                save_item_text(item_folder, f"Message: {properties_to_save.get('Message', '')} \n")
-                save_item_text(item_folder, f"To: {properties_to_save.get('To', '')} \n")
-                save_item_text(item_folder, f"From: {properties_to_save.get('From', '')} \n")
+                # save_item_text(item_folder, f"requires_shipping: {item['requires_shipping']} \n")
+                # save_item_text(item_folder, f"Font: {properties_to_save.get('font')} \n")
+                # save_item_text(item_folder, f"Shipping: {properties_to_save.get('Shipping')} \n")
+                # save_item_text(item_folder, f"Gift: {properties_to_save.get('Gift')} \n")
+                # save_item_text(item_folder, f"Message: {properties_to_save.get('Message', '')} \n")
+                # save_item_text(item_folder, f"To: {properties_to_save.get('To', '')} \n")
+                # save_item_text(item_folder, f"From: {properties_to_save.get('From', '')} \n")
                 
                 # Create PDF with customization
-                output_pdf = f"{item_folder}/product_customization.pdf"
-                create_pdf(output_pdf, outer_image_path, inner_image_path, user_custom_image,text_to, text_description, text_from, text_font)
+                output_pdf = f"{order_folder}/#{order_num}__{index}-{item_quantity}.pdf"
+                create_pdf(order_num, gift, output_pdf, outer_image_path, inner_image_path, user_custom_image,text_to, text_description, text_from, text_font)
+                index += 1                 
                 # print(f"PDF created: {output_pdf}")
-
+                
+        #make fulfullment status as fulfilled
+        # if fulfillment_flag:
+        #     create_fulfillment(order_id)
+            
 class MainWindow(QtWidgets.QDialog):
 
     def __init__(self):
@@ -287,6 +319,7 @@ class MainWindow(QtWidgets.QDialog):
         self.cancelBtn = self.findChild(QtWidgets.QPushButton, 'cancelBtn')
         self.progressBar = self.findChild(QtWidgets.QProgressBar, 'progressBar')
         self.newOrderLAB = self.findChild(QtWidgets.QLabel, 'new_orderd_num')
+        self.errorLog = self.findChild(QtWidgets.QPlainTextEdit, 'errorLog')
         self.progressBar.setValue(0)
 
         self.locationLET.setText(self.data_path)
@@ -354,13 +387,13 @@ class MainWindow(QtWidgets.QDialog):
         self.spinner_label.show()
 
         self.getOrderBtn.setEnabled(False)
-
         
         self.thread = QtCore.QThread()
         self.worker = OrderFetcher(self.data_path, self.last_order_num)
         self.worker.moveToThread(self.thread)
         self.worker.progress.connect(self.update_progress)
         self.worker.message.connect(self.show_message)
+        self.worker.errorMessage.connect(self.show_error_message)
         self.worker.updateLastSavedOrder.connect(self.updateLastSavedOrder)
         self.worker.finished.connect(self.thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
@@ -384,6 +417,9 @@ class MainWindow(QtWidgets.QDialog):
 
     def show_message(self, message):
         QtWidgets.QMessageBox.information(self, "Information", message)
+        
+    def show_error_message(self, message):
+        self.errorLog.insertPlainText(f"{message}\n")
 
     def reset_get_order_button(self):
         self.is_fetching = False
