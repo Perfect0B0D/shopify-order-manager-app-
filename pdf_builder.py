@@ -29,7 +29,7 @@ def load_font_as_base64(font_path):
     with open(font_path, "rb") as font_file:
         return base64.b64encode(font_file.read()).decode('utf-8')
 
-def insert_message_content(c, pos_x, pos_y, text_from, message, text_to, font_size, font_family, size=(400, 140)):
+def insert_message_content(c, pos_x, pos_y, text_from, message, text_to, font_size, font_family, img_size=(400, 140)):
     # Escape any special HTML characters in the text
     if message is not None:
      escaped_text = html.escape(message)
@@ -60,13 +60,16 @@ def insert_message_content(c, pos_x, pos_y, text_from, message, text_to, font_si
                 margin: 0px;
             }}
             #message_content {{
-                width: {size[0]}px;
-                font-size: {font_size}px;
-                height: {size[1]}px;
+                width: {img_size[0] * 10}px;
+                font-size: {font_size * 10}px;
+                height: {img_size[1] * 10}px;
                 display: flex;
                 flex-direction: column;
                 justify-content: space-between;
                 font-family: '{font_family}';
+                overflw:auto;
+                padding:0px;
+                margin:0px;
             }}
         </style>
     </head>
@@ -91,13 +94,17 @@ def insert_message_content(c, pos_x, pos_y, text_from, message, text_to, font_si
 
     # Create a temporary image file name
     image_filename = 'message.png'  # Just the filename
+    image_file = os.path.join(hti.output_path, 'message.png')
 
     try:
         # Capture the image
-        hti.screenshot(html_file=temp_html_file_path, save_as=image_filename, size=size)
-
-        # Add the image to the PDF canvas at the specified position
-        c.drawImage(os.path.join(hti.output_path, image_filename), pos_x, pos_y, width=size[0], height=size[1], mask="auto")
+        hti.screenshot(html_file=temp_html_file_path, save_as=image_filename, size=(img_size[0] * 10, img_size[1] * 10))
+        # with Image.open(image_file) as img:
+        #  original_width, original_height = img.size
+        #  new_size = (original_width * 10, original_height * 10)
+        #  img = img.resize(new_size, Image.LANCZOS)  # Use LANCZOS filter for high-quality resizing
+        #  img.save(image_file, dpi=(720, 720))
+        add_image_to_canvas(c,os.path.join(hti.output_path, image_filename), pos_x, pos_y, width=img_size[0], height=img_size[1])
         
     except Exception as e:
         print(f"Error occurred while creating the image: {e}")
@@ -112,6 +119,7 @@ def insert_message_content(c, pos_x, pos_y, text_from, message, text_to, font_si
             os.remove(generated_image_path)
     
     return
+
 def draw_string_with_max_width(c, text, x, y, max_width, font_name='Helvetica', font_size=12, rotate=False):
     c.setFont(font_name, font_size)
     
@@ -198,15 +206,15 @@ def add_image_to_canvas(c, img_path, x, y, width, height, target_dpi=300):
     img = Image.open(img_path)
 
     # Get the original DPI of the image
-    img_dpi = img.info.get('dpi', (72, 72))[0]  # Default to 72 DPI if not provided
+    # img_dpi = img.info.get('dpi', (72, 72))[0]  # Default to 72 DPI if not provided
+    # if img_dpi < target_dpi:
+    #     # Scale the image based on target DPI
+    #     dpi_scale_factor = target_dpi / img_dpi
+    #     new_width = int(img.width * dpi_scale_factor)
+    #     new_height = int(img.height * dpi_scale_factor)
 
-    # Scale the image based on target DPI
-    dpi_scale_factor = target_dpi / img_dpi
-    new_width = int(img.width * dpi_scale_factor)
-    new_height = int(img.height * dpi_scale_factor)
-
-    # Resize image based on the new DPI scale factor
-    img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    #     # Resize image based on the new DPI scale factor
+    #     img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
     # Embed the higher-resolution image into the PDF
     img_reader = ImageReader(img)
@@ -232,6 +240,9 @@ def create_pdf(order_number,gift, output_filename, outer_image_path, inner_image
     c.line(350, 155, 350, 352)   
     c.line(350, 155, 224, 155) 
     c.setStrokeColor('black')
+    insert_front_img = Image.open(f"./asset/insertcard/front.jpg")
+    image_reader = ImageReader(insert_front_img)
+    c.drawImage(image_reader, 224, 155, width = 126, height = 197 )
     
     c.showPage()  # New page
     
@@ -257,22 +268,21 @@ def create_pdf(order_number,gift, output_filename, outer_image_path, inner_image
             original_width, original_height = custom_img.size
             max_width = image_width[i]
             max_height = image_height[i]
-            aspect_ratio = original_width / original_height
-            if (original_width / max_width) > (original_height / max_height):
-                new_width = max_width
-                new_height = int(new_width / aspect_ratio)
+            aspect_ratio = max_width / max_height
+            if (original_width / original_height) > aspect_ratio:
+                new_width = original_width
+                new_height = int(original_width * aspect_ratio)
             else:
-                new_height = max_height
-                new_width = int(new_height * aspect_ratio)
-            resized_img = custom_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-            final_img = Image.new("RGB", (max_width, max_height), (255, 255, 255))
-            paste_x = (max_width - new_width) // 2
-            paste_y = (max_height - new_height) // 2
-            final_img.paste(resized_img, (paste_x, paste_y))
-            c.drawImage(ImageReader(final_img), x - Right_IMG_POS, y, width=max_width, height=max_height)
+                new_height = original_height
+                new_width = int(original_height / aspect_ratio)
+            final_img = Image.new("RGB", (new_width, new_height), (255, 255, 255))
+            paste_x = (new_width - original_width) // 2
+            paste_y = (new_height - original_height) // 2
+            final_img.paste(custom_img, (paste_x, paste_y))
+            c.drawImage(ImageReader(final_img.convert('RGB')), x - Right_IMG_POS, y, width=max_width, height=max_height)
 
     
-    insert_message_content(c, column_x_positions[0] - Right_IMG_POS, row_y_positions[1], text_from, text_description, text_to, font_size, font, size=(428, 188))
+    insert_message_content(c, column_x_positions[0] - Right_IMG_POS, row_y_positions[1], text_from, text_description, text_to, font_size, font, img_size=(428, 188))
     # gift card and insert card
     c.setStrokeColor('white')
     c.line(PAGE_WIDTH - 63, 379, PAGE_WIDTH - 63, 155)   
@@ -285,17 +295,19 @@ def create_pdf(order_number,gift, output_filename, outer_image_path, inner_image
     c.setStrokeColor('black')
     
     # c.drawString(PAGE_WIDTH - 345, 335, f"order number: {order_number}")
-    draw_string_with_max_width(c,  f"order number: {order_number}",PAGE_WIDTH - 336, 190, 155, rotate=True)
+    # draw_string_with_max_width(c,  f"order number: {order_number}",PAGE_WIDTH - 336, 190, 155, rotate=True)
+    insert_back_img = Image.open(f"./asset/insertcard/back.jpg")
+    image_reader = ImageReader(insert_back_img)
+    c.drawImage(image_reader, PAGE_WIDTH - 350, 155, width = 126, height = 197 )
+    # c.saveState()
+    # c.translate(PAGE_WIDTH - 295, 180)
+    # c.rotate(90)
+    # barcode = code128.Code128(order_number, barHeight=30, barWidth=1.5)
+    # barcode.drawOn(c, 0, 0)
+    # c.restoreState()
     
-    c.saveState()
-    c.translate(PAGE_WIDTH - 295, 180)
-    c.rotate(90)
-    barcode = code128.Code128(order_number, barHeight=30, barWidth=1.5)
-    barcode.drawOn(c, 0, 0)
-    c.restoreState()
-    
-    draw_string_with_max_width(c,  f"Gift:",PAGE_WIDTH - 275, 230, 155, rotate=True)
-    draw_string_with_max_width(c,  f"{gift}",PAGE_WIDTH - 255, 180, 155, rotate=True)
+    # draw_string_with_max_width(c,  f"Gift:",PAGE_WIDTH - 275, 230, 155, rotate=True)
+    # draw_string_with_max_width(c,  f"{gift}",PAGE_WIDTH - 255, 180, 155, rotate=True)
     
     c.showPage()
     c.save()

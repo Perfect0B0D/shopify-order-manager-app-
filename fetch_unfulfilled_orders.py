@@ -38,8 +38,9 @@ def get_fulfillment_order(order_id):
         response = requests.get(url, headers=HEADERS)
         response.raise_for_status()
         fulfillment_order = response.json().get("fulfillment_orders", [])
+        # print("fulfillment_order====================>",fulfillment_order)
         if fulfillment_order:
-            return fulfillment_order[0]  # Assuming we use the first fulfillment order
+            return fulfillment_order  # Assuming we use the first fulfillment order
         else:
             print("No fulfillment orders found for this order.")
             return None
@@ -50,45 +51,55 @@ def get_fulfillment_order(order_id):
         return None
 
 def create_fulfillment(order_id):
-    fulfillment_order = get_fulfillment_order(order_id)
-    if not fulfillment_order:
+    fulfillment_orders = get_fulfillment_order(order_id)
+    
+    # Debugging: Print the type and content of fulfillment_orders
+    print("Type of fulfillment_orders:", type(fulfillment_orders))
+    print("Content of fulfillment_orders:", fulfillment_orders)
+    
+    if not fulfillment_orders:
         print("Unable to proceed without a valid fulfillment order.")
         return
-    
-    # Extract fulfillment order ID and line items
-    fulfillment_order_id = fulfillment_order["id"]
-    fulfillment_line_items = [
-        {
-            "id": item["id"],
-            "quantity": item["quantity"]
-        }
-        for item in fulfillment_order["line_items"]
-    ]
 
-    # Define fulfillment payload for the fulfillment/createV2 endpoint
-    payload = {
-        "fulfillment": {
-            "message": f"Delivery status:",
-            "notify_customer": True,
-            "line_items_by_fulfillment_order": [
+    # Loop through fulfillment orders to process each open order
+    for fulfillment_order in fulfillment_orders:
+        if isinstance(fulfillment_order, dict):  # Ensure we are working with a dictionary
+            # Extract fulfillment order ID and line items
+            fulfillment_order_id = fulfillment_order["id"]
+            fulfillment_line_items = [
                 {
-                    "fulfillment_order_id": fulfillment_order_id,
-                    "fulfillment_order_line_items": fulfillment_line_items
+                    "id": item["id"],
+                    "quantity": item["quantity"]
                 }
+                for item in fulfillment_order["line_items"]
             ]
-        }
-    }
 
-    # Send the POST request to create the fulfillment
-    try:
-        url = f"{SHOPIFY_STORE_URL}/admin/api/2023-04/fulfillments.json"
-        response = requests.post(url, headers=HEADERS, json=payload)
-        response.raise_for_status()
-        print("Fulfillment created successfully.")
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        print(f"Error creating fulfillment: {e}")
-        print(response.text)  # Print full response for debugging
+            # Define fulfillment payload for the fulfillment/createV2 endpoint
+            payload = {
+                "fulfillment": {
+                    "message": "Delivery status:",
+                    "notify_customer": True,
+                    "line_items_by_fulfillment_order": [
+                        {
+                            "fulfillment_order_id": fulfillment_order_id,
+                            "fulfillment_order_line_items": fulfillment_line_items
+                        }
+                    ]
+                }
+            }
+
+            # Send the POST request to create the fulfillment
+            try:
+                url = f"{SHOPIFY_STORE_URL}/admin/api/2023-04/fulfillments.json"
+                response = requests.post(url, headers=HEADERS, json=payload)
+                response.raise_for_status()
+                print(f"Fulfillment created successfully for order ID: {fulfillment_order_id}.")
+            except requests.exceptions.RequestException as e:
+                print(f"Error creating fulfillment for order ID {fulfillment_order_id}: {e}")
+                if response is not None:
+                    print(response.text)  # Print full response for debugging
+        else:
+            print("Expected a dictionary for fulfillment_order, but got:", type(fulfillment_order))
 
 
 def create_order_folder(base_dir, order_id):

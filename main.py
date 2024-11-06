@@ -56,7 +56,7 @@ class OrderFetcher(QtCore.QObject):
             # if not created:
             #     print(f"Order folder for #{order_id} already exists.")
             #     continue
-            # if order_id < 1081:
+            # if order_id < 1075:
             #     continue
 
             if order_id > self.last_order_num:
@@ -202,6 +202,7 @@ class OrderFetcher(QtCore.QObject):
                         # Create PDF with customization
                         output_pdf = f"{order_folder}/#{order_num}__{index}-{item_quantity}.pdf"
                         create_pdf(order_num, gift, output_pdf, outer_image_path, inner_image_path, user_custom_image,"", text_description,"", text_font)
+                        self.errorMessage.emit(f"{order_folder}/#{order_num}__{index}-{item_quantity}.pdf created")                       
                         # print(f"PDF created: {output_pdf}")
                 index += 1
                 # save_item_text(item_folder, f"requires_shipping: {item['requires_shipping']} \n")
@@ -280,12 +281,13 @@ class OrderFetcher(QtCore.QObject):
                 # Create PDF with customization
                 output_pdf = f"{order_folder}/#{order_num}__{index}-{item_quantity}.pdf"
                 create_pdf(order_num, gift, output_pdf, outer_image_path, inner_image_path, user_custom_image,text_to, text_description, text_from, text_font)
+                self.errorMessage.emit(f"{order_folder}/#{order_num}__{index}-{item_quantity}.pdf created")
                 index += 1                 
                 # print(f"PDF created: {output_pdf}")
                 
-        #make fulfullment status as fulfilled
-        # if fulfillment_flag:
-        #     create_fulfillment(order_id)
+        # make fulfullment status as fulfilled
+        if fulfillment_flag:
+            create_fulfillment(order_id)
             
 class MainWindow(QtWidgets.QDialog):
 
