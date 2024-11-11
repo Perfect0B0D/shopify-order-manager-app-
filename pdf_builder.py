@@ -204,23 +204,10 @@ def fetch_image(url):
 def add_image_to_canvas(c, img_path, x, y, width, height, target_dpi=300):
     """Add an image to the canvas, rescaling it to a higher DPI for better quality."""
     img = Image.open(img_path)
-
-    # Get the original DPI of the image
-    # img_dpi = img.info.get('dpi', (72, 72))[0]  # Default to 72 DPI if not provided
-    # if img_dpi < target_dpi:
-    #     # Scale the image based on target DPI
-    #     dpi_scale_factor = target_dpi / img_dpi
-    #     new_width = int(img.width * dpi_scale_factor)
-    #     new_height = int(img.height * dpi_scale_factor)
-
-    #     # Resize image based on the new DPI scale factor
-    #     img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
-    # Embed the higher-resolution image into the PDF
     img_reader = ImageReader(img)
     c.drawImage(img_reader, x, y, width=width, height=height, mask='auto')
 
-def create_pdf(order_number,gift, output_filename, outer_image_path, inner_image_path, user_custom_image, text_to="", text_description="", text_from="", font="Helvetica", font_size=18):
+def create_pdf(gift_claim_code, gift_pin_code, gift_card_text, gift_card_img_url,gift_card_price,order_number,gift_card_title, output_filename, outer_image_path, inner_image_path, user_custom_image, text_to="", text_description="", text_from="", font="Helvetica", font_size=18):
     c = canvas.Canvas(output_filename, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
     
     # --------- First Page (Outer Image) ---------
@@ -231,18 +218,27 @@ def create_pdf(order_number,gift, output_filename, outer_image_path, inner_image
     
     # gift card and insert card
     
-    c.setStrokeColor('white')
-    c.line(63, 379, 63, 155)   
-    c.line(63, 379, 224, 379)   
-    c.line(224, 155, 63, 155)   
-    c.line(224, 155, 224, 379)   
-    c.line(224, 352, 350, 352)   
-    c.line(350, 155, 350, 352)   
-    c.line(350, 155, 224, 155) 
-    c.setStrokeColor('black')
+    # c.setStrokeColor('white')
+    # c.line(63, 379, 63, 155)   
+    # c.line(63, 379, 224, 379)   
+    # c.line(224, 155, 63, 155)   
+    # c.line(224, 155, 224, 379)   
+    # c.line(224, 352, 350, 352)   
+    # c.line(350, 155, 350, 352)   
+    # c.line(350, 155, 224, 155) 
+    # c.setStrokeColor('black')
     insert_front_img = Image.open(f"./asset/insertcard/front.jpg")
     image_reader = ImageReader(insert_front_img)
     c.drawImage(image_reader, 224, 155, width = 126, height = 197 )
+    
+    if gift_card_img_url != "":
+        c.saveState()
+        c.translate(223, 155)
+        c.rotate(90)
+        # gift_card_img = fetch_image(gift_card_img_url)
+        gift_card_img = ImageReader("./temp/gift_card.png")
+        c.drawImage(ImageReader(gift_card_img), 0, 0, width = 223, height=161, mask="auto")
+        c.restoreState()
     
     c.showPage()  # New page
     
@@ -257,48 +253,65 @@ def create_pdf(order_number,gift, output_filename, outer_image_path, inner_image
     row_y_positions = [597, 378, 150]   # Initial Y position (top margin)
     image_width = [189, 188, 189]
     image_height = [189, 178, 189]
-
+    
     # -------- Custom Images --------
     for i in range(3):  # Up to 3 custom images
         if user_custom_image[i]:
             x = column_x_positions[i]
             y = row_y_positions[i]
-            
-            custom_img = fetch_image(user_custom_image[i])
-            original_width, original_height = custom_img.size
-            max_width = image_width[i]
-            max_height = image_height[i]
-            aspect_ratio = max_width / max_height
-            if (original_width / original_height) > aspect_ratio:
-                new_width = original_width
-                new_height = int(original_width * aspect_ratio)
-            else:
-                new_height = original_height
-                new_width = int(original_height / aspect_ratio)
-            final_img = Image.new("RGB", (new_width, new_height), (255, 255, 255))
-            paste_x = (new_width - original_width) // 2
-            paste_y = (new_height - original_height) // 2
-            final_img.paste(custom_img, (paste_x, paste_y))
-            c.drawImage(ImageReader(final_img.convert('RGB')), x - Right_IMG_POS, y, width=max_width, height=max_height)
+            img_url = f"custom_{i}.png"
+            if os.path.exists(f"./temp/{img_url}"):
+                # custom_img = fetch_image(user_custom_image[i])
+                with Image.open(f"./temp/custom_{i}.png") as custom_img:
+                    original_width, original_height = custom_img.size
+                    max_width = image_width[i]
+                    max_height = image_height[i]
+                    aspect_ratio = max_width / max_height
+                    if (original_width / original_height) > aspect_ratio:
+                        new_width = original_width
+                        new_height = int(original_width * aspect_ratio)
+                    else:
+                        new_height = original_height
+                        new_width = int(original_height / aspect_ratio)
+                    final_img = Image.new("RGB", (new_width, new_height), (255, 255, 255))
+                    paste_x = (new_width - original_width) // 2
+                    paste_y = (new_height - original_height) // 2
+                    final_img.paste(custom_img, (paste_x, paste_y))
+                    c.drawImage(ImageReader(final_img.convert('RGB')), x - Right_IMG_POS, y, width=max_width, height=max_height)
 
     
     insert_message_content(c, column_x_positions[0] - Right_IMG_POS, row_y_positions[1], text_from, text_description, text_to, font_size, font, img_size=(428, 188))
     # gift card and insert card
-    c.setStrokeColor('white')
-    c.line(PAGE_WIDTH - 63, 379, PAGE_WIDTH - 63, 155)   
-    c.line(PAGE_WIDTH - 63, 379, PAGE_WIDTH - 224, 379)   
-    c.line(PAGE_WIDTH - 224, 155, PAGE_WIDTH - 63, 155)   
-    c.line(PAGE_WIDTH - 224, 155, PAGE_WIDTH - 224, 379)   
-    c.line(PAGE_WIDTH - 224, 352, PAGE_WIDTH - 350, 352)   
-    c.line(PAGE_WIDTH - 350, 155, PAGE_WIDTH - 350, 352)   
-    c.line(PAGE_WIDTH - 350, 155, PAGE_WIDTH - 224, 155)  
-    c.setStrokeColor('black')
+    # c.setStrokeColor('black')
+    # c.line(PAGE_WIDTH - 63, 379, PAGE_WIDTH - 63, 155)   
+    # c.line(PAGE_WIDTH - 63, 379, PAGE_WIDTH - 224, 379)   
+    # c.line(PAGE_WIDTH - 224, 155, PAGE_WIDTH - 63, 155)   
+    # c.line(PAGE_WIDTH - 224, 155, PAGE_WIDTH - 224, 379)   
+    # c.line(PAGE_WIDTH - 224, 352, PAGE_WIDTH - 350, 352)   
+    # c.line(PAGE_WIDTH - 350, 155, PAGE_WIDTH - 350, 352)   
+    # c.line(PAGE_WIDTH - 350, 155, PAGE_WIDTH - 224, 155)  
+    # c.setStrokeColor('black')
     
     # c.drawString(PAGE_WIDTH - 345, 335, f"order number: {order_number}")
     # draw_string_with_max_width(c,  f"order number: {order_number}",PAGE_WIDTH - 336, 190, 155, rotate=True)
     insert_back_img = Image.open(f"./asset/insertcard/back.jpg")
     image_reader = ImageReader(insert_back_img)
     c.drawImage(image_reader, PAGE_WIDTH - 350, 155, width = 126, height = 197 )
+    if gift_card_img_url != "":
+        c.line(PAGE_WIDTH-63, 158, PAGE_WIDTH-224, 158)
+        gift_card_price =  "$" + f"{round(float(gift_card_price))}" 
+        gift_claim_code = "Claim: " + gift_claim_code
+        gift_pin_code = "PIN: " + gift_pin_code
+        draw_string_with_max_width(c, gift_card_title, PAGE_WIDTH -205, 165,font_size=15, max_width=160, rotate=True)
+        draw_string_with_max_width(c, gift_card_price, PAGE_WIDTH -205, 330,font_size=14, max_width=160, font_name="Helvetica-Bold", rotate=True)
+        draw_string_with_max_width(c, gift_claim_code, PAGE_WIDTH -188, 165, max_width=160, rotate=True)
+        draw_string_with_max_width(c, gift_pin_code, PAGE_WIDTH -188, 295, max_width=160, rotate=True)
+        draw_string_with_max_width(c, gift_card_text, PAGE_WIDTH -170, 165, max_width=210, font_size=8, rotate=True)
+        
+    # draw_string_with_max_width(c, gift_claim_code, PAGE_WIDTH -80, 155, max_width=160, rotate=True)
+    # draw_string_with_max_width(c, gift_pin_code, PAGE_WIDTH -100, 155, max_width=160, rotate=True)
+    # draw_string_with_max_width(c, gift_card_price, PAGE_WIDTH -120, 155, max_width=160, rotate=True)
+    # draw_string_with_max_width(c, gift_card_text, PAGE_WIDTH -150, 155, max_width=160, rotate=True)
     # c.saveState()
     # c.translate(PAGE_WIDTH - 295, 180)
     # c.rotate(90)

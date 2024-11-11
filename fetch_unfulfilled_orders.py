@@ -240,7 +240,7 @@ def get_product_image_url(product_id):
         response.raise_for_status()
         
         product = response.json().get("product", {})
-        print("productData", product)
+        # print("productData", product)
         if "image" in product and product["image"]:
             image_url = product["image"]["src"]
             print(f"Image URL fetched for product {product_id}: {image_url}")
