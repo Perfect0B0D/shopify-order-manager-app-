@@ -207,7 +207,7 @@ def add_image_to_canvas(c, img_path, x, y, width, height, target_dpi=300):
     img_reader = ImageReader(img)
     c.drawImage(img_reader, x, y, width=width, height=height, mask='auto')
 
-def create_pdf(gift_claim_code, gift_pin_code, gift_card_text, gift_card_img_url,gift_card_price,order_number,gift_card_title, output_filename, outer_image_path, inner_image_path, user_custom_image, text_to="", text_description="", text_from="", font="Helvetica", font_size=18):
+def create_pdf(gift_claim_code, gift_pin_code, gift_card_text, gift_card_img_url,gift_product_img_url,gift_product_title,gift_card_price,order_number,gift_card_title, output_filename, outer_image_path, inner_image_path, user_custom_image, text_to="", text_description="", text_from="", font="Helvetica", addon_img_url = "", addon_title = ""):
     c = canvas.Canvas(output_filename, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
     
     # --------- First Page (Outer Image) ---------
@@ -233,11 +233,33 @@ def create_pdf(gift_claim_code, gift_pin_code, gift_card_text, gift_card_img_url
     
     if gift_card_img_url != "":
         c.saveState()
-        c.translate(223, 155)
+        c.translate(227, 158)
         c.rotate(90)
         # gift_card_img = fetch_image(gift_card_img_url)
         gift_card_img = ImageReader("./temp/gift_card.png")
         c.drawImage(ImageReader(gift_card_img), 0, 0, width = 223, height=161, mask="auto")
+        c.restoreState()
+        
+    if gift_product_img_url != "":
+        c.saveState()
+        c.translate(223, 450)
+        c.rotate(90)
+        # gift_card_img = fetch_image(gift_card_img_url)
+        gift_product_img = ImageReader("./temp/gift_product_img.png")
+        c.setFontSize(10)
+        c.drawString(5, 170, f"Gift: {gift_product_title}")
+        c.drawImage(ImageReader(gift_product_img), 0, 0, width = 150, height=150, mask="auto")
+        c.restoreState()
+        
+    if addon_img_url != "":
+        c.saveState()
+        c.translate(223, 650)
+        c.rotate(90)
+        # gift_card_img = fetch_image(gift_card_img_url)
+        gift_product_img = ImageReader("./temp/addon_img.png")
+        c.setFontSize(10)
+        c.drawString(5, 170, f"AddOn: {addon_title}")
+        c.drawImage(ImageReader(gift_product_img), 0, 0, width = 150, height=150, mask="auto")
         c.restoreState()
     
     c.showPage()  # New page
@@ -280,7 +302,7 @@ def create_pdf(gift_claim_code, gift_pin_code, gift_card_text, gift_card_img_url
                     c.drawImage(ImageReader(final_img.convert('RGB')), x - Right_IMG_POS, y, width=max_width, height=max_height)
 
     
-    insert_message_content(c, column_x_positions[0] - Right_IMG_POS, row_y_positions[1], text_from, text_description, text_to, font_size, font, img_size=(428, 188))
+    insert_message_content(c, column_x_positions[0] - Right_IMG_POS, row_y_positions[1], text_from, text_description, text_to, 18, font, img_size=(428, 188))
     # gift card and insert card
     # c.setStrokeColor('black')
     # c.line(PAGE_WIDTH - 63, 379, PAGE_WIDTH - 63, 155)   

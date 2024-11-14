@@ -2,10 +2,12 @@ import sys
 import os
 import re
 import json
+import time
 from PyQt5 import QtWidgets, uic, QtGui, QtCore
 from PyQt5.QtWidgets import QFileDialog
 from config_manager import ConfigManager  # Import the ConfigManager class
 from datetime import datetime
+
 
 from fetch_unfulfilled_orders import (
     get_unfulfilled_orders,
@@ -15,7 +17,7 @@ from fetch_unfulfilled_orders import (
     get_product_image_url
 )
 from pdf_builder import create_pdf
-from purchase_gift_card import purchase_gift_card
+from purchase_gift_card import (purchase_gift_card)
 
 
 class OrderFetcher(QtCore.QObject):
@@ -30,11 +32,11 @@ class OrderFetcher(QtCore.QObject):
         self.data_path = data_path
         self.last_order_num = last_order_num
         self.gift_card_data = None
-        
         with open('./asset/gift_card/shop-card-id.json', 'r') as file:
             self.gift_card_data = json.load(file)
 
     def run(self):
+     
         # Fetch unfulfilled orders
         unfulfilled_orders = get_unfulfilled_orders()
 
@@ -61,6 +63,7 @@ class OrderFetcher(QtCore.QObject):
             # order_folder, created = create_order_folder(self.data_path, order_id)
 
             # if not created:
+            
             #     print(f"Order folder for #{order_id} already exists.")
             #     continue
             # if order_id != 1071:
@@ -96,31 +99,32 @@ class OrderFetcher(QtCore.QObject):
             item_quantity = item["quantity"]
             
             properties_to_save = {
-                "radio-buttons-14": None,
-                "1b. Custom Design Upload-1": None,
-                "2b. Custom Design Upload-2": None,
-                "3b. Custom Design Upload-3": None,
-                "1. Box Designs": None,
-                "2. Gift ": None,
-                "Font": None,
-                "Type your message here": None,
-                "Pictures and/or Logo-1": None,
-                "Pictures and/or Logo-2": None,
-                "Pictures and/or Logo-3": None,
-                "_main_prd": None,
-                "Bonus Gift" : None,
+                "radio-buttons-14": "",
+                "1b. Custom Design Upload-1": "",
+                "2b. Custom Design Upload-2": "",
+                "3b. Custom Design Upload-3": "",
+                "1. Box Designs": "",
+                "2. Gift ": "",
+                "3. Add on ": "",
+                "Font": "",
+                "Type your message here": "",
+                "Pictures and/or Logo-1": "",
+                "Pictures and/or Logo-2": "",
+                "Pictures and/or Logo-3": "",
+                "_main_prd": "",
+                "Bonus Gift" : "",
 
-                "Print": None,
-                "font": None,
-                "Gift": None,
-                "To": None,
-                "From": None,
-                "Message" : None,
-                "upload1" : None,
-                "upload2" : None,
-                "upload3" : None,
-                "Shipping" : None,
-                "3. Gift Cards" : None
+                "Print": "",
+                "font": "",
+                "Gift": "",
+                "To": "",
+                "From": "",
+                "Message" : "",
+                "upload1" : "",
+                "upload2" : "",
+                "upload3" : "",
+                "Shipping" : "",
+                "3. Gift Cards" : ""
             }
 
             for prop in item["properties"]:
@@ -132,6 +136,7 @@ class OrderFetcher(QtCore.QObject):
             temp_folder = "./temp"
             if not os.path.exists(temp_folder):
                 os.makedirs(temp_folder)
+                
             
             if properties_to_save.get("radio-buttons-14"):
                 # if item_quantity:
@@ -218,17 +223,28 @@ class OrderFetcher(QtCore.QObject):
                         
                         gift_card = properties_to_save.get("3. Gift Cards", "")
                         gift = properties_to_save.get("2. Gift ","")
-                        gift_product_img_url = ""
+                        addon = properties_to_save.get("3. Add on ", "")
+                        gift_product_img_url, gift_product_title = "", ""
+                        addon_img_url, addon_title = "", ""
                         gift_card_claim_code, gift_card_pin_code, gift_card_text, gift_image_url, gift_card_title, error_meassage = "", "", "", "", "", ""
                         gift_card_price = 0
                         _main_prd = item["variant_id"]
                         if gift != "":
                              for line_item in order["line_items"]:
-                                if line_item["gift_card"] == False and line_item["properties"][0]["value"] == _main_prd and line_item["title"] in gift:
+                                if line_item["gift_card"] == False and line_item["properties"][0]["value"] == f"{_main_prd}" and line_item["title"] in gift:
                                     gift_product_img_url = get_product_image_url(line_item["product_id"])
+                                    gift_product_title = line_item["title"]
+                                    download_image(gift_product_img_url, temp_folder, "gift_product_img.png")
+                                    break
+                        if addon != "":
+                             for line_item in order["line_items"]:
+                                if line_item["gift_card"] == False and line_item["properties"][0]["value"] == f"{_main_prd}" and line_item["title"] in addon:
+                                    addon_img_url = get_product_image_url(line_item["product_id"])
+                                    addon_title = line_item["title"]
+                                    download_image(addon_img_url, temp_folder, "addon_img.png")
                                     break
                         if gift_card != "":
-                            downladed_card_img = False
+                            downloaded_card_img = False
                             for inner_index in range(item["quantity"]):
                                 for line_item in order["line_items"]:
                                     if line_item["gift_card"] == True and line_item["properties"][0]["value"] == f"{_main_prd}":
@@ -245,18 +261,21 @@ class OrderFetcher(QtCore.QObject):
                                                 fulfillment_flag = False
                                                 _error_message = f"when purchase gift card in {order_num} order, " + error_meassage
                                                 self.errorMessage.emit(f"{_error_message}")
-                                            if not downladed_card_img:
+                                                break
+                                            if not downloaded_card_img:
                                              download_image(gift_image_url, temp_folder, "gift_card.png")
                                              downloaded_card_img = True
-                                            output_pdf = f"{order_folder}/#{order_num}__{index}-{item_quantity}-{inner_index + 1}.pdf"
-                                            create_pdf(gift_card_claim_code,gift_card_pin_code, gift_card_text, gift_image_url,gift_card_price,order_num, gift_card_title, output_pdf,outer_image_path, inner_image_path, user_custom_image,"",text_description,"", text_font)
-                                            self.errorMessage.emit(f"{order_folder}/#{order_num}__{index}-{item_quantity}-{inner_index + 1}.pdf created")
+                                            if fulfillment_flag:
+                                                print("addon title======>", addon_title)
+                                                output_pdf = f"{order_folder}/#{order_num}__{index}-{item_quantity}-{inner_index + 1}.pdf"
+                                                create_pdf(gift_card_claim_code,gift_card_pin_code, gift_card_text, gift_image_url,gift_product_img_url, gift_product_title, gift_card_price, order_num, gift_card_title, output_pdf,outer_image_path, inner_image_path, user_custom_image,"",text_description,"", text_font , addon_img_url, addon_title)
+                                                self.errorMessage.emit(f"{order_folder}/#{order_num}__{index}-{item_quantity}-{inner_index + 1}.pdf created")
                         else:
                             # Create PDF with customization
-                            
-                            output_pdf = f"{order_folder}/#{order_num}__{index}-{item_quantity}.pdf"
-                            create_pdf(gift_card_claim_code,gift_card_pin_code, gift_card_text, gift_image_url,gift_card_price, order_num, gift_card_title, output_pdf, outer_image_path, inner_image_path, user_custom_image,"", text_description,"", text_font)
-                            self.errorMessage.emit(f"{order_folder}/#{order_num}__{index}-{item_quantity}.pdf created")                       
+                            if fulfillment_flag:
+                                output_pdf = f"{order_folder}/#{order_num}__{index}-{item_quantity}.pdf"
+                                create_pdf(gift_card_claim_code,gift_card_pin_code, gift_card_text, gift_image_url, gift_product_img_url, gift_product_title, gift_card_price, order_num, gift_card_title, output_pdf, outer_image_path, inner_image_path, user_custom_image,"", text_description,"", text_font , addon_img_url, addon_title)
+                                self.errorMessage.emit(f"{order_folder}/#{order_num}__{index}-{item_quantity}.pdf created")                       
                             # print(f"PDF created: {output_pdf}")
                 index += 1
 
@@ -320,12 +339,15 @@ class OrderFetcher(QtCore.QObject):
                 gift_card = properties_to_save.get("Bonus Gift", "")
                 gift_product_img_url = ""
                 gift_card_claim_code, gift_card_pin_code, gift_card_text, gift_image_url, gift_card_title, error_meassage = "", "", "", "", "", ""
+                gift_product_title = ""
                 gift_card_price = 0
                 _main_prd = properties_to_save.get("_main_prd", "")
                 if gift != "":
                    for line_item in order["line_items"]:
                         if line_item["gift_card"] == False and line_item["properties"][0]["value"] == _main_prd:
                             gift_product_img_url = get_product_image_url(line_item["product_id"]) 
+                            gift_product_title = line_item["title"]
+                            download_image(gift_product_img_url, temp_folder, "gift_product_img.png")
                             break
                 if gift_card != "":
                     for line_item in order["line_items"]:
@@ -343,12 +365,15 @@ class OrderFetcher(QtCore.QObject):
                                  fulfillment_flag = False
                                  _error_message = f"when purchase gift card in {order_num} order, " + error_meassage
                                  self.errorMessage.emit(f"{_error_message}")
+                                 break
                                 download_image(gift_image_url, temp_folder, "gift_card.png")
+                                
                 # Create PDF with customization
-                output_pdf = f"{order_folder}/#{order_num}__{index}-{item_quantity}.pdf"
-                create_pdf(gift_card_claim_code,gift_card_pin_code, gift_card_text, gift_image_url,gift_card_price, order_num, gift_card_title, output_pdf, outer_image_path, inner_image_path, user_custom_image,text_to, text_description, text_from, text_font)
-                self.errorMessage.emit(f"{order_folder}/#{order_num}__{index}-{item_quantity}.pdf created")
-                index += 1                 
+                if fulfillment_flag:
+                    output_pdf = f"{order_folder}/#{order_num}__{index}-{item_quantity}.pdf"
+                    create_pdf(gift_card_claim_code,gift_card_pin_code, gift_card_text, gift_image_url, gift_product_img_url, gift_product_title, gift_card_price, order_num, gift_card_title, output_pdf, outer_image_path, inner_image_path, user_custom_image,text_to, text_description, text_from, text_font)
+                    self.errorMessage.emit(f"{order_folder}/#{order_num}__{index}-{item_quantity}.pdf created")
+                    index += 1                 
                 # print(f"PDF created: {output_pdf}")
                 
         # make fulfullment status as fulfilled
@@ -504,6 +529,10 @@ if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
 
     app.setWindowIcon(QtGui.QIcon("./asset/greetabl_g.png"))
+    current_datetime = datetime.now()
+    formatted_date = current_datetime.strftime("%Y-%m-%d")
+   
     window = MainWindow()
+    window.setWindowTitle(f"Greetabl Gift   {formatted_date}")
     window.show()
     sys.exit(app.exec_())
