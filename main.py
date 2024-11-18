@@ -7,6 +7,7 @@ from PyQt5 import QtWidgets, uic, QtGui, QtCore
 from PyQt5.QtWidgets import QFileDialog
 from config_manager import ConfigManager  # Import the ConfigManager class
 from datetime import datetime
+import sqlite3
 
 
 from fetch_unfulfilled_orders import (
@@ -17,7 +18,7 @@ from fetch_unfulfilled_orders import (
     get_product_image_url
 )
 from pdf_builder import create_pdf
-from purchase_gift_card import (purchase_gift_card)
+from purchase_gift_card import (purchase_gift_card, get_claim_and_pin_codes)
 
 
 class OrderFetcher(QtCore.QObject):
@@ -26,14 +27,20 @@ class OrderFetcher(QtCore.QObject):
     finished = QtCore.pyqtSignal()
     message = QtCore.pyqtSignal(str)
     errorMessage = QtCore.pyqtSignal(str)
-
+    
+    
+    
     def __init__(self, data_path, last_order_num):
         super().__init__()
         self.data_path = data_path
         self.last_order_num = last_order_num
+        self.temp_last_order_num = last_order_num
         self.gift_card_data = None
         with open('./asset/gift_card/shop-card-id.json', 'r') as file:
             self.gift_card_data = json.load(file)
+    # connect to sqlite(gift_card.db)
+        self.sqlConn = sqlite3.connect("./asset/gift_card.db", check_same_thread=False)
+        self.cursor = self.sqlConn.cursor()
 
     def run(self):
      
@@ -69,17 +76,18 @@ class OrderFetcher(QtCore.QObject):
             # if order_id != 1071:
             #     continue
 
-            if order_id > self.last_order_num:
-                self.last_order_num = order_id  # Update last order number
+             # Update last order number
             
 
              # Update progress bar
             self.progress.emit(index + 1, 0, f"Processing {index + 1} of {total_orders} orders")
 
-            self.process_order_items(order, current_order_data_folder)
-           
-
-           
+            sucess = self.process_order_items(order, current_order_data_folder)
+            if sucess:
+             if order_id > self.last_order_num:
+                self.last_order_num = order_id 
+            else:
+                break
 
         # Emit the final message and finish signal
         self.updateLastSavedOrder.emit(self.last_order_num)
@@ -124,7 +132,8 @@ class OrderFetcher(QtCore.QObject):
                 "upload2" : "",
                 "upload3" : "",
                 "Shipping" : "",
-                "3. Gift Cards" : ""
+                "3. Gift Cards" : "",
+                "date-range-16" : ""
             }
 
             for prop in item["properties"]:
@@ -137,7 +146,38 @@ class OrderFetcher(QtCore.QObject):
             if not os.path.exists(temp_folder):
                 os.makedirs(temp_folder)
                 
-            
+            if "Print" in item["title"] and len(item["properties"]) == 0:
+                design_product_name = item_name
+                # Strip pricing info from the design product name
+                match = re.search(r'^(.*?)\s*\(\s*\+\$[\d,.]+\s*\)', design_product_name)
+                if match:
+                    design_product_name = match.group(1).strip()
+                
+                # Find product directory in ./asset/products
+                product_directory = os.path.join("./asset/products", design_product_name)
+
+
+                if os.path.exists(product_directory):
+                    inner_image_path = os.path.join(product_directory, "inner.jpg")
+                    outer_image_path = os.path.join(product_directory, "outer.jpg")
+
+                    if not os.path.exists(inner_image_path):
+                        self.errorMessage.emit(f"inner.png not found in {product_directory}")
+                        fulfillment_flag = False
+                        continue
+                    if not os.path.exists(outer_image_path):
+                        self.errorMessage.emit(f"outer.png not found in {product_directory}")
+                        fulfillment_flag = False
+                        continue
+                else:
+                    self.errorMessage.emit(f"Product directory '{design_product_name}' not found in ./asset/products")
+                    fulfillment_flag = False
+                    continue
+                if fulfillment_flag:
+                    output_pdf = f"{order_folder}/#{order_num}__{index}-{item_quantity}.pdf"
+                    create_pdf("","", "", "", "", "", "", order_num, "", output_pdf, outer_image_path, inner_image_path)
+                    self.errorMessage.emit(f"{order_folder}/#{order_num}__{index}-{item_quantity}.pdf created")
+                    index += 1  
             if properties_to_save.get("radio-buttons-14"):
                 # if item_quantity:
                 #  item_directory_name = f"#{index} - " + item_name + f" - {item_quantity }"
@@ -172,9 +212,34 @@ class OrderFetcher(QtCore.QObject):
                     if properties_to_save.get("Pictures and/or Logo-3"):
                      download_image(properties_to_save.get("Pictures and/or Logo-3"),item_folder,"Logo-3.jpg")
                 if designOption == "Choose from our designs":
-                    # save_item_text(item_folder, f"Choose from our designs. \n")
+                    # check date range
+                    creatable_pdf = False
                     if properties_to_save.get("1. Box Designs"):
-                        
+                        date_range_from = properties_to_save.get("date-range-16", "")
+                        if order_num <= self.temp_last_order_num:
+                            if date_range_from != "":
+                                date_range_from = date_range_from[:10]
+                                date_range_from_datetime = datetime.strptime(date_range_from, "%Y-%m-%d")
+                                current_datetime = datetime.now()
+                                if current_datetime >= date_range_from_datetime:
+                                    creatable_pdf = True
+                                else:
+                                    creatable_pdf = False
+                                    fulfillment_flag = False
+                        else:
+                             if date_range_from != "":
+                                date_range_from = date_range_from[:10]
+                                date_range_from_datetime = datetime.strptime(date_range_from, "%Y-%m-%d")
+                                current_datetime = datetime.now()
+                                if current_datetime >= date_range_from_datetime:
+                                    creatable_pdf = True
+                                else:
+                                    creatable_pdf = False
+                                    fulfillment_flag = False
+                             else:
+                                 creatable_pdf = True
+                            
+                    if creatable_pdf:
                         design_product_name = properties_to_save['1. Box Designs']
                         # Strip pricing info from the design product name
                         match = re.search(r'^(.*?)\s*\(\s*\+\$[\d,.]+\s*\)', design_product_name)
@@ -253,23 +318,60 @@ class OrderFetcher(QtCore.QObject):
                                         if gift_card_order_id == None:
                                             self.errorMessage.emit(f"Not found gift card id. please check shop-card-id.json - {gift_card_sku}")
                                             fulfillment_flag = False
+                                        elif gift_card_order_id == 0:
+                                            gift_image_url = get_product_image_url(line_item["product_id"])
+                                            download_image(gift_image_url, temp_folder, "gift_card.png")
                                         else:
-                                            gift_card_claim_code, gift_card_pin_code, gift_card_text, gift_image_url, error_meassage = purchase_gift_card(3426, "alex@greetabl.com")
                                             gift_card_price = line_item["price"]
                                             gift_card_title = line_item["title"]
-                                            if error_meassage != "":
-                                                fulfillment_flag = False
-                                                _error_message = f"when purchase gift card in {order_num} order, " + error_meassage
-                                                self.errorMessage.emit(f"{_error_message}")
-                                                break
+                                            item_index = f"{order_num}__{index}-{item_quantity}-{inner_index + 1}"
+                                            res = self.cursor.execute("SELECT * FROM gift_tb WHERE item_index = ?", (item_index,))
+                                            gift_res_data = res.fetchone()
+                                            if gift_res_data != None:
+                                                if gift_res_data[2] != '':
+                                                        gift_card_claim_code = gift_res_data[2]
+                                                        gift_card_pin_code = gift_res_data[3]
+                                                        gift_card_text = gift_res_data[4]
+                                                        gift_image_url = gift_res_data[5]
+                                                else:
+                                                    purchase_url = gift_res_data[1]
+                                                    gift_card_claim_code, gift_card_pin_code, gift_card_text, gift_image_url, error_meassage = get_claim_and_pin_codes(purchase_url)
+                                                    if error_meassage != "":
+                                                        fulfillment_flag = False
+                                                        _error_message = f"when purchase gift card in {order_num} order, " + error_meassage
+                                                        self.errorMessage.emit(f"{_error_message}")
+                                                        break
+                                            else:
+                                                gift_card_claim_code, gift_card_pin_code, gift_card_text, gift_image_url, error_meassage, purchase_url = purchase_gift_card(3426, "alex@greetabl.com")
+                                                self.cursor.execute("""
+                                                    INSERT INTO gift_tb (item_index, purchase_url, gift_card_claim_code, gift_card_pin_code, gift_card_text, gift_image_url)
+                                                    VALUES (?, ?, ?, ?, ?, ?)
+                                                """, (item_index, purchase_url, gift_card_claim_code, gift_card_pin_code, gift_card_text, gift_image_url))
+
+                                                # Commit the transaction
+                                                self.sqlConn.commit()
+                                                if error_meassage != "":
+                                                    fulfillment_flag = False
+                                                    _error_message = f"when purchase gift card in {order_num} order, " + error_meassage
+                                                    self.errorMessage.emit(f"{_error_message}")
+                                                    break
                                             if not downloaded_card_img:
                                              download_image(gift_image_url, temp_folder, "gift_card.png")
                                              downloaded_card_img = True
                                             if fulfillment_flag:
-                                                print("addon title======>", addon_title)
                                                 output_pdf = f"{order_folder}/#{order_num}__{index}-{item_quantity}-{inner_index + 1}.pdf"
                                                 create_pdf(gift_card_claim_code,gift_card_pin_code, gift_card_text, gift_image_url,gift_product_img_url, gift_product_title, gift_card_price, order_num, gift_card_title, output_pdf,outer_image_path, inner_image_path, user_custom_image,"",text_description,"", text_font , addon_img_url, addon_title)
                                                 self.errorMessage.emit(f"{order_folder}/#{order_num}__{index}-{item_quantity}-{inner_index + 1}.pdf created")
+                            
+                            if not fulfillment_flag:
+                                    for filename in os.listdir(f"{order_folder}"):
+                                        if f"{order_folder}/#{order_num}__{index}-{item_quantity}-" in filename and filename.endswith(".pdf"):
+                                            file_path = os.path.join(f"{order_folder}", filename)
+                                            try:
+                                                os.remove(file_path)
+                                                print(f"Deleted: {file_path}")
+                                            except Exception as e:
+                                                print(f"Error deleting {file_path}: {e}")
                         else:
                             # Create PDF with customization
                             if fulfillment_flag:
@@ -357,17 +459,42 @@ class OrderFetcher(QtCore.QObject):
                             if gift_card_order_id == None:
                                 self.errorMessage.emit(f"Not found gift card id. please check shop-card-id.json - {gift_card_sku}")
                                 fulfillment_flag = False
+                            elif gift_card_order_id == 0:
+                                gift_image_url = get_product_image_url(line_item["product_id"])
+                                download_image(gift_image_url, temp_folder, "gift_card.png")
                             else:
-                                gift_card_claim_code, gift_card_pin_code, gift_card_text, gift_image_url, error_meassage = purchase_gift_card(gift_card_order_id, "alex@greetabl.com")
                                 gift_card_price = line_item["price"]
                                 gift_card_title = line_item["title"]
-                                if error_meassage != "":
-                                 fulfillment_flag = False
-                                 _error_message = f"when purchase gift card in {order_num} order, " + error_meassage
-                                 self.errorMessage.emit(f"{_error_message}")
-                                 break
+                                item_index = f"{order_num}__{index}-{item_quantity}"
+                                res = self.cursor.execute("SELECT * FROM gift_tb WHERE item_index = ?", (item_index,))
+                                gift_res_data = res.fetchone()
+                                if gift_res_data != None:
+                                  if gift_res_data[2] != '':
+                                        gift_card_claim_code = gift_res_data[2]
+                                        gift_card_pin_code = gift_res_data[3]
+                                        gift_card_text = gift_res_data[4]
+                                        gift_image_url = gift_res_data[5]
+                                  else:
+                                       purchase_url = gift_res_data[1]
+                                       gift_card_claim_code, gift_card_pin_code, gift_card_text, gift_image_url, error_meassage = get_claim_and_pin_codes(purchase_url)
+                                       if error_meassage != "":
+                                        fulfillment_flag = False
+                                        _error_message = f"when purchase gift card in {order_num} order, " + error_meassage
+                                        self.errorMessage.emit(f"{_error_message}")
+                                        break
+                                else:
+                                    gift_card_claim_code, gift_card_pin_code, gift_card_text, gift_image_url, error_meassage, purchase_url = purchase_gift_card(gift_card_order_id, "alex@greetabl.com")
+                                    self.cursor.execute("""
+                                                    INSERT INTO gift_tb (item_index, purchase_url, gift_card_claim_code, gift_card_pin_code, gift_card_text, gift_image_url)
+                                                    VALUES (?, ?, ?, ?, ?, ?)
+                                                """, (item_index, purchase_url, gift_card_claim_code, gift_card_pin_code, gift_card_text, gift_image_url))
+                                    self.sqlConn.commit()
+                                    if error_meassage != "":
+                                     fulfillment_flag = False
+                                     _error_message = f"when purchase gift card in {order_num} order, " + error_meassage
+                                     self.errorMessage.emit(f"{_error_message}")
+                                     break
                                 download_image(gift_image_url, temp_folder, "gift_card.png")
-                                
                 # Create PDF with customization
                 if fulfillment_flag:
                     output_pdf = f"{order_folder}/#{order_num}__{index}-{item_quantity}.pdf"
@@ -379,6 +506,12 @@ class OrderFetcher(QtCore.QObject):
         # make fulfullment status as fulfilled
         # if fulfillment_flag:
         #     create_fulfillment(order_id)
+        if fulfillment_flag:
+          item_index = f"{order_num}__"
+          item_index_pattern = f"{item_index}%"
+          self.cursor.execute("DELETE FROM gift_tb WHERE item_index LIKE ?", (item_index_pattern,))
+          self.sqlConn.commit()
+        return fulfillment_flag
             
 class MainWindow(QtWidgets.QDialog):
 
@@ -386,9 +519,7 @@ class MainWindow(QtWidgets.QDialog):
         super(MainWindow, self).__init__()
         uic.loadUi('main.ui', self)
 
-        self.setWindowIcon(QtGui.QIcon("./asset/greetabl_g.png"))
-       
-
+        # self.setWindowIcon(QtGui.QIcon("./asset/greetabl_g.png"))
         self.config_manager = ConfigManager()
         self.data_path = self.config_manager.get_order_data_directory()
         if self.data_path == "" or not os.path.exists(self.data_path):
@@ -397,8 +528,8 @@ class MainWindow(QtWidgets.QDialog):
         self.temp_data_path = self.data_path
         self.last_order_num = self.config_manager.get_last_saved_order_number()
         self.new_ordered_num = 0
+        self.processing_order_num = 0
         self.is_fetching = False
-        
         self.fetching_new_order_num()
         self.init_ui()
         
@@ -412,6 +543,7 @@ class MainWindow(QtWidgets.QDialog):
         self.cancelBtn = self.findChild(QtWidgets.QPushButton, 'cancelBtn')
         self.progressBar = self.findChild(QtWidgets.QProgressBar, 'progressBar')
         self.newOrderLAB = self.findChild(QtWidgets.QLabel, 'new_orderd_num')
+        self.processingOrderLAB = self.findChild(QtWidgets.QLabel, 'processing_orders_num')
         self.errorLog = self.findChild(QtWidgets.QPlainTextEdit, 'errorLog')
         self.progressBar.setValue(0)
 
@@ -423,11 +555,12 @@ class MainWindow(QtWidgets.QDialog):
         self.getOrderBtn.clicked.connect(self.start_order_fetching)
         self.saveBtn.clicked.connect(self.save_setting_data)
         self.cancelBtn.clicked.connect(self.cancel_setting_data)
-        self.newOrderLAB.setText(f'New orders: {self.new_ordered_num}')
+        self.newOrderLAB.setText(f'New Orders: {self.new_ordered_num}')
+        self.processingOrderLAB.setText(f'Processing Orders: {self.processing_order_num}')
 
     def fetching_new_order_num(self):
         unfulfilled_orders = get_unfulfilled_orders()
-
+        total_unfulfilled_orders = len(unfulfilled_orders)
         if not unfulfilled_orders:
             print("No unfulfilled orders found.")
             return
@@ -436,6 +569,7 @@ class MainWindow(QtWidgets.QDialog):
             order_id = order["order_number"]
             if order_id > self.last_order_num:
                 self.new_ordered_num += 1
+        self.processing_order_num = total_unfulfilled_orders - self.new_ordered_num
 
     def closeEvent(self, event):
         if self.is_fetching:
@@ -484,16 +618,18 @@ class MainWindow(QtWidgets.QDialog):
         self.thread = QtCore.QThread()
         self.worker = OrderFetcher(self.data_path, self.last_order_num)
         self.worker.moveToThread(self.thread)
+        
         self.worker.progress.connect(self.update_progress)
         self.worker.message.connect(self.show_message)
         self.worker.errorMessage.connect(self.show_error_message)
         self.worker.updateLastSavedOrder.connect(self.updateLastSavedOrder)
+        
         self.worker.finished.connect(self.thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
 
-        self.thread.started.connect(self.worker.run)
         self.thread.finished.connect(self.reset_get_order_button)
+        self.thread.started.connect(self.worker.run)
 
         self.thread.start()
 
@@ -521,8 +657,11 @@ class MainWindow(QtWidgets.QDialog):
         self.getOrderBtn.setText("GET ORDER")
         self.getOrderBtn.setEnabled(True)
         self.selectDirectoryBtn.setEnabled(True)
-        self.newOrderLAB.setText(f'New orders: 0')
-
+        self.progressBar.setValue(0)
+        self.progressBar.setFormat("")
+        self.fetching_new_order_num()
+        self.newOrderLAB.setText(f'New Orders: {self.new_ordered_num}')
+        self.processingOrderLAB.setText(f'Processing Orders: {self.processing_order_num}')
 
 # Start the application
 if __name__ == "__main__":

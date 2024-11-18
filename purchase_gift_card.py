@@ -22,7 +22,7 @@ def generate_signature(api_key, api_secret):
 
 
 def purchase_gift_card(shop_card_id, to_email):
-    claim_code, pin_code, left_container_text, image_url = "", "", "", ""
+    claim_code, pin_code, left_container_text, image_url, redemption_url = "", "", "", "", ""
     error_message = ""
     signature, timestamp = generate_signature(api_key, api_secret)
     purchase_params = {
@@ -46,14 +46,14 @@ def purchase_gift_card(shop_card_id, to_email):
             redemption_url = purchase_details.get('url')
             # print("redemption_url==========>", redemption_url)
             claim_code, pin_code, left_container_text, image_url, error_message = get_claim_and_pin_codes(redemption_url)
-            return claim_code, pin_code, left_container_text, image_url, error_message
+            return claim_code, pin_code, left_container_text, image_url, error_message, redemption_url
         else:
             error_message = f"Error purchasing gift card: {response.status_code} - {response.text}"
-            return claim_code, pin_code, left_container_text, image_url, error_message
+            return claim_code, pin_code, left_container_text, image_url, error_message, redemption_url
 
     except requests.exceptions.RequestException as e:
         error_message = f"RequestException during purchase: {e}"
-        return claim_code, pin_code, left_container_text, image_url, error_message
+        return claim_code, pin_code, left_container_text, image_url, error_message, redemption_url
 
 def get_claim_and_pin_codes(url):
     chrome_options = Options()
@@ -70,22 +70,25 @@ def get_claim_and_pin_codes(url):
     
     try:
         driver.get(url)
-        WebDriverWait(driver, 30).until(
+        WebDriverWait(driver, 50).until(
             EC.presence_of_element_located((By.XPATH, "//div[@class='my-gift-card-image']"))
           )
         # Wait for the 'view gift code' button to be clickable and then click it
-        view_gift_code_btn = WebDriverWait(driver, 30).until(
-            EC.element_to_be_clickable((By.XPATH, '//div[@class="my-gift-card-prereveal"]/button'))
-        )
-        view_gift_code_btn.click()
+        try:
+            view_gift_code_btn = WebDriverWait(driver, 50).until(
+                EC.element_to_be_clickable((By.XPATH, '//div[@class="my-gift-card-prereveal"]/button'))
+            )
+            view_gift_code_btn.click()
+        except TimeoutException:
+            print("View Gift Button not found, skipping")
         
-        WebDriverWait(driver, 30).until(
+        WebDriverWait(driver, 50).until(
             EC.visibility_of_element_located((By.XPATH, "//main/aside/div[@class='my-gift-card-reveal']/div[@class='my-fields-group']/div[@class='my-field']/div[@class='my-value ng-binding']"))
         )
 
         # Wait for the page content to load
         
-        WebDriverWait(driver, 30).until(
+        WebDriverWait(driver, 50).until(
             EC.visibility_of_element_located((By.CSS_SELECTOR, 'div.my-gift-card-image img.my-image'))
         )
 

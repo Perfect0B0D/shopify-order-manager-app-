@@ -207,7 +207,7 @@ def add_image_to_canvas(c, img_path, x, y, width, height, target_dpi=300):
     img_reader = ImageReader(img)
     c.drawImage(img_reader, x, y, width=width, height=height, mask='auto')
 
-def create_pdf(gift_claim_code, gift_pin_code, gift_card_text, gift_card_img_url,gift_product_img_url,gift_product_title,gift_card_price,order_number,gift_card_title, output_filename, outer_image_path, inner_image_path, user_custom_image, text_to="", text_description="", text_from="", font="Helvetica", addon_img_url = "", addon_title = ""):
+def create_pdf(gift_claim_code, gift_pin_code, gift_card_text, gift_card_img_url,gift_product_img_url,gift_product_title,gift_card_price,order_number,gift_card_title, output_filename, outer_image_path, inner_image_path, user_custom_image=["","",""], text_to="", text_description="", text_from="", font="Allura", addon_img_url = "", addon_title = ""):
     c = canvas.Canvas(output_filename, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
     
     # --------- First Page (Outer Image) ---------
@@ -319,7 +319,7 @@ def create_pdf(gift_claim_code, gift_pin_code, gift_card_text, gift_card_img_url
     insert_back_img = Image.open(f"./asset/insertcard/back.jpg")
     image_reader = ImageReader(insert_back_img)
     c.drawImage(image_reader, PAGE_WIDTH - 350, 155, width = 126, height = 197 )
-    if gift_card_img_url != "":
+    if gift_claim_code != "":
         c.line(PAGE_WIDTH-63, 158, PAGE_WIDTH-224, 158)
         gift_card_price =  "$" + f"{round(float(gift_card_price))}" 
         gift_claim_code = "Claim: " + gift_claim_code
