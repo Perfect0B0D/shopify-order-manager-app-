@@ -38,6 +38,10 @@ class OrderFetcher(QtCore.QObject):
         self.gift_card_data = None
         with open('./asset/gift_card/shop-card-id.json', 'r') as file:
             self.gift_card_data = json.load(file)
+            
+        # with open('./test_gift_card.json', 'r') as file:
+        #     self.gift_card_data_file = json.load(file)
+        #     print("adfasfdasfdas",self.gift_card_data_file)
     # connect to sqlite(gift_card.db)
         self.sqlConn = sqlite3.connect("./asset/gift_card.db", check_same_thread=False)
         self.cursor = self.sqlConn.cursor()
@@ -73,7 +77,7 @@ class OrderFetcher(QtCore.QObject):
             
             #     print(f"Order folder for #{order_id} already exists.")
             #     continue
-            # if order_id != 1071:
+            # if order_id != 1091:
             #     continue
 
              # Update last order number
@@ -83,12 +87,13 @@ class OrderFetcher(QtCore.QObject):
             self.progress.emit(index + 1, 0, f"Processing {index + 1} of {total_orders} orders")
 
             sucess = self.process_order_items(order, current_order_data_folder)
-            if sucess:
-             if order_id > self.last_order_num:
+            # if sucess:
+            #  if order_id > self.last_order_num:
+            #     self.last_order_num = order_id 
+            # else:
+            #     break
+            if order_id > self.last_order_num:
                 self.last_order_num = order_id 
-            else:
-                break
-
         # Emit the final message and finish signal
         self.updateLastSavedOrder.emit(self.last_order_num)
         self.message.emit(f"{total_orders} Orders have been successfully fetched and saved.")
@@ -96,6 +101,7 @@ class OrderFetcher(QtCore.QObject):
 
     def process_order_items(self, order, order_folder):
         # print("Order===========>", order)
+        
         fulfillment_flag = True
         order_num = order["order_number"]
         order_id = order["id"]
@@ -297,16 +303,16 @@ class OrderFetcher(QtCore.QObject):
                         if gift != "":
                              for line_item in order["line_items"]:
                                 if line_item["gift_card"] == False and line_item["properties"][0]["value"] == f"{_main_prd}" and line_item["title"] in gift:
-                                    gift_product_img_url = get_product_image_url(line_item["product_id"])
+                                    # gift_product_img_url = get_product_image_url(line_item["product_id"])
                                     gift_product_title = line_item["title"]
-                                    download_image(gift_product_img_url, temp_folder, "gift_product_img.png")
+                                    # download_image(gift_product_img_url, temp_folder, "gift_product_img.png")
                                     break
                         if addon != "":
                              for line_item in order["line_items"]:
                                 if line_item["gift_card"] == False and line_item["properties"][0]["value"] == f"{_main_prd}" and line_item["title"] in addon:
-                                    addon_img_url = get_product_image_url(line_item["product_id"])
+                                    # addon_img_url = get_product_image_url(line_item["product_id"])
                                     addon_title = line_item["title"]
-                                    download_image(addon_img_url, temp_folder, "addon_img.png")
+                                    # download_image(addon_img_url, temp_folder, "addon_img.png")
                                     break
                         if gift_card != "":
                             downloaded_card_img = False
@@ -342,6 +348,11 @@ class OrderFetcher(QtCore.QObject):
                                                         self.errorMessage.emit(f"{_error_message}")
                                                         break
                                             else:
+                                                # if inner_index < 9:
+                                                #  print(self.gift_card_data_file[inner_index]['id'],self.gift_card_data_file[inner_index]['url'])
+                                                #  gift_card_claim_code, gift_card_pin_code, gift_card_text, gift_image_url, error_meassage = get_claim_and_pin_codes(self.gift_card_data_file[inner_index]['url'])
+                                                #  purchase_url = self.gift_card_data_file[inner_index]['url']
+                                                # else:
                                                 gift_card_claim_code, gift_card_pin_code, gift_card_text, gift_image_url, error_meassage, purchase_url = purchase_gift_card(3426, "alex@greetabl.com")
                                                 self.cursor.execute("""
                                                     INSERT INTO gift_tb (item_index, purchase_url, gift_card_claim_code, gift_card_pin_code, gift_card_text, gift_image_url)
@@ -358,6 +369,7 @@ class OrderFetcher(QtCore.QObject):
                                             if not downloaded_card_img:
                                              download_image(gift_image_url, temp_folder, "gift_card.png")
                                              downloaded_card_img = True
+                                            # download_image(gift_image_url, temp_folder, "gift_card.png")
                                             if fulfillment_flag:
                                                 output_pdf = f"{order_folder}/#{order_num}__{index}-{item_quantity}-{inner_index + 1}.pdf"
                                                 create_pdf(gift_card_claim_code,gift_card_pin_code, gift_card_text, gift_image_url,gift_product_img_url, gift_product_title, gift_card_price, order_num, gift_card_title, output_pdf,outer_image_path, inner_image_path, user_custom_image,"",text_description,"", text_font , addon_img_url, addon_title)
@@ -447,9 +459,9 @@ class OrderFetcher(QtCore.QObject):
                 if gift != "":
                    for line_item in order["line_items"]:
                         if line_item["gift_card"] == False and line_item["properties"][0]["value"] == _main_prd:
-                            gift_product_img_url = get_product_image_url(line_item["product_id"]) 
+                            # gift_product_img_url = get_product_image_url(line_item["product_id"]) 
                             gift_product_title = line_item["title"]
-                            download_image(gift_product_img_url, temp_folder, "gift_product_img.png")
+                            # download_image(gift_product_img_url, temp_folder, "gift_product_img.png")
                             break
                 if gift_card != "":
                     for line_item in order["line_items"]:

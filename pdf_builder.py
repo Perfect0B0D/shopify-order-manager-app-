@@ -227,9 +227,16 @@ def create_pdf(gift_claim_code, gift_pin_code, gift_card_text, gift_card_img_url
     # c.line(350, 155, 350, 352)   
     # c.line(350, 155, 224, 155) 
     # c.setStrokeColor('black')
-    insert_front_img = Image.open(f"./asset/insertcard/front.jpg")
-    image_reader = ImageReader(insert_front_img)
-    c.drawImage(image_reader, 224, 155, width = 126, height = 197 )
+    # insert_front_img = Image.open(f"./asset/insertcard/front.jpg")
+    # image_reader = ImageReader(insert_front_img)
+    # c.drawImage(image_reader, 224, 155, width = 126, height = 197 )
+    
+    c.saveState()
+    c.translate(340, 155)
+    c.rotate(90)
+    barcode = code128.Code128(order_number, barHeight=30, barWidth=2.5)
+    barcode.drawOn(c, 0, 0)
+    c.restoreState()
     
     if gift_card_img_url != "":
         c.saveState()
@@ -240,26 +247,26 @@ def create_pdf(gift_claim_code, gift_pin_code, gift_card_text, gift_card_img_url
         c.drawImage(ImageReader(gift_card_img), 0, 0, width = 223, height=161, mask="auto")
         c.restoreState()
         
-    if gift_product_img_url != "":
+    if gift_product_title != "":
         c.saveState()
         c.translate(223, 450)
         c.rotate(90)
         # gift_card_img = fetch_image(gift_card_img_url)
-        gift_product_img = ImageReader("./temp/gift_product_img.png")
+        # gift_product_img = ImageReader("./temp/gift_product_img.png")
         c.setFontSize(10)
         c.drawString(5, 170, f"Gift: {gift_product_title}")
-        c.drawImage(ImageReader(gift_product_img), 0, 0, width = 150, height=150, mask="auto")
+        # c.drawImage(ImageReader(gift_product_img), 0, 0, width = 150, height=150, mask="auto")
         c.restoreState()
         
-    if addon_img_url != "":
+    if addon_title != "":
         c.saveState()
         c.translate(223, 650)
         c.rotate(90)
         # gift_card_img = fetch_image(gift_card_img_url)
-        gift_product_img = ImageReader("./temp/addon_img.png")
+        # gift_product_img = ImageReader("./temp/addon_img.png")
         c.setFontSize(10)
         c.drawString(5, 170, f"AddOn: {addon_title}")
-        c.drawImage(ImageReader(gift_product_img), 0, 0, width = 150, height=150, mask="auto")
+        # c.drawImage(ImageReader(gift_product_img), 0, 0, width = 150, height=150, mask="auto")
         c.restoreState()
     
     c.showPage()  # New page
@@ -326,8 +333,8 @@ def create_pdf(gift_claim_code, gift_pin_code, gift_card_text, gift_card_img_url
         gift_pin_code = "PIN: " + gift_pin_code
         draw_string_with_max_width(c, gift_card_title, PAGE_WIDTH -205, 165,font_size=15, max_width=160, rotate=True)
         draw_string_with_max_width(c, gift_card_price, PAGE_WIDTH -205, 330,font_size=14, max_width=160, font_name="Helvetica-Bold", rotate=True)
-        draw_string_with_max_width(c, gift_claim_code, PAGE_WIDTH -188, 165, max_width=160, rotate=True)
-        draw_string_with_max_width(c, gift_pin_code, PAGE_WIDTH -188, 295, max_width=160, rotate=True)
+        draw_string_with_max_width(c, gift_claim_code, PAGE_WIDTH -188, 165,font_size=8, max_width=160, rotate=True)
+        draw_string_with_max_width(c, gift_pin_code, PAGE_WIDTH -188, 295,font_size=8, max_width=160, rotate=True)
         draw_string_with_max_width(c, gift_card_text, PAGE_WIDTH -170, 165, max_width=210, font_size=8, rotate=True)
         
     # draw_string_with_max_width(c, gift_claim_code, PAGE_WIDTH -80, 155, max_width=160, rotate=True)

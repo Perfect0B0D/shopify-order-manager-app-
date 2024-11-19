@@ -116,7 +116,7 @@ def get_claim_and_pin_codes(url):
             pin_code = pin_code_element.text
             print("PIN Code:", pin_code)
         except NoSuchElementException:
-            error_message = f"Pin code not found."
+            print(f"Pin code not found.")
 
         # Extract additional left container text
         try:
