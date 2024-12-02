@@ -1,8 +1,11 @@
+import requests
+import pandas as pd
+from io import BytesIO
+from urllib.parse import urlparse
 import sys
 import os
 import re
 import json
-import time
 from PyQt5 import QtWidgets, uic, QtGui, QtCore
 from PyQt5.QtWidgets import QFileDialog
 from config_manager import ConfigManager  # Import the ConfigManager class
@@ -127,6 +130,7 @@ class OrderFetcher(QtCore.QObject):
                 "Pictures and/or Logo-3": "",
                 "_main_prd": "",
                 "Bonus Gift" : "",
+                "Recipient Addresses-1" : "",
 
                 "Print": "",
                 "font": "",
@@ -281,16 +285,47 @@ class OrderFetcher(QtCore.QObject):
                             user_custom_image[2] = properties_to_save["Pictures and/or Logo-3"]
                             download_image(user_custom_image[2], temp_folder, "custom_2.png")
 
+                     
                         # Additional properties
-                        text_font = properties_to_save.get("Font","Questrial")
-                        if text_font == "":
-                            text_font = "Questrial"
-                        font_path = f'./asset/font/{text_font}/{text_font}.ttf'
-                        if not os.path.exists(font_path):
-                         self.errorMessage.emit(f"{font_path} does not exist in {order_num}-{index} order")
-                         fulfillment_flag = False
-                         continue
-                        text_description = properties_to_save.get("Type your message here", "")
+                        # text_font = properties_to_save.get("Font","Questrial")
+                        # if text_font == "":
+                        #     text_font = "Questrial"
+                        # font_path = f'./asset/font/{text_font}/{text_font}.ttf'
+                        # if not os.path.exists(font_path):
+                        #  self.errorMessage.emit(f"{font_path} does not exist in {order_num}-{index} order")
+                        #  fulfillment_flag = False
+                        #  continue
+                        # text_description = properties_to_save.get("Type your message here", "")
+                        
+                        varients_message_url = properties_to_save.get("Recipient Addresses-1", "")
+                        message_template = True
+                        if varients_message_url == "":
+                            message_template = False
+                        else:
+                            response_message = requests.get(varients_message_url)
+                            if response_message.status_code == 200:
+                                file_extension = varients_message_url.split('.')[-1].lower()
+                                varients_message_raw_data = BytesIO(response_message.content)
+                                if file_extension in ['xlsx', 'xls']:
+                                    try:
+                                    # For Excel files
+                                        varients_message = pd.read_excel(varients_message_raw_data, engine='openpyxl')
+                                    except Exception as e:
+                                        self.errorMessage.emit(f"Error reading Excel file: {e} in {order_num}-{index} order")
+                                        message_template = False
+                                elif file_extension == 'csv':
+                                    # For CSV files
+                                    try:
+                                        varients_message = pd.read_csv(varients_message_raw_data)
+                                    except Exception as e:
+                                        self.errorMessage.emit(f"Error reading CSV file: {e} in {order_num}-{index} order")
+                                        message_template = False
+                                else:
+                                    # Unsupported file format
+                                    print(f"Unsupported file format: {file_extension}")
+                                    message_template = False
+                                        
+                                    
                         
                         gift_card = properties_to_save.get("3. Gift Cards", "")
                         gift = properties_to_save.get("2. Gift ","")
@@ -300,6 +335,7 @@ class OrderFetcher(QtCore.QObject):
                         gift_card_claim_code, gift_card_pin_code, gift_card_text, gift_image_url, gift_card_title, error_meassage = "", "", "", "", "", ""
                         gift_card_price = 0
                         _main_prd = item["variant_id"]
+                        
                         if gift != "":
                              for line_item in order["line_items"]:
                                 if line_item["gift_card"] == False and len(line_item["properties"]) > 0 and  line_item["properties"][0]["value"] == f"{_main_prd}" and line_item["title"] in gift:
@@ -314,9 +350,29 @@ class OrderFetcher(QtCore.QObject):
                                     addon_title = line_item["title"]
                                     # download_image(addon_img_url, temp_folder, "addon_img.png")
                                     break
-                        if gift_card != "":
-                            downloaded_card_img = False
-                            for inner_index in range(item["quantity"]):
+                        
+                        downloaded_card_img = False
+                                
+                        for inner_index in range(item["quantity"]):
+                            text_to, text_description, text_from, text_font = "", "", "", ""
+                            if message_template:
+                                if not varients_message.empty and len(varients_message["MESSAGE - TO NAME"]) > inner_index:
+                                    if not pd.isna(varients_message["MESSAGE - TO NAME"].iloc[inner_index]):
+                                        text_to = varients_message["MESSAGE - TO NAME"].iloc[inner_index]
+                                    if not pd.isna(varients_message["MESSAGE"].iloc[inner_index]):
+                                        text_description = varients_message["MESSAGE"].iloc[inner_index]
+                                    if not pd.isna(varients_message["MESSAGE - FROM NAME"].iloc[inner_index]):
+                                        text_from = varients_message["MESSAGE - FROM NAME"].iloc[inner_index]
+                                    if not pd.isna(varients_message["FONT"].iloc[inner_index]):
+                                        text_font = varients_message["FONT"].iloc[inner_index]
+                            if text_font == "":
+                                text_font = "Questrial"
+                            font_path = f'./asset/font/{text_font}/{text_font}.ttf'
+                            if not os.path.exists(font_path):
+                                self.errorMessage.emit(f"{font_path} does not exist in {order_num}-{index}-{inner_index} order")
+                                fulfillment_flag = False
+                                continue
+                            if gift_card != "":
                                 for line_item in order["line_items"]:
                                     if line_item["gift_card"] == True and len(line_item["properties"]) > 0 and  line_item["properties"][0]["value"] == f"{_main_prd}":
                                         gift_card_sku = line_item["sku"]
@@ -348,11 +404,7 @@ class OrderFetcher(QtCore.QObject):
                                                         self.errorMessage.emit(f"{_error_message}")
                                                         break
                                             else:
-                                                # if inner_index < 9:
-                                                #  print(self.gift_card_data_file[inner_index]['id'],self.gift_card_data_file[inner_index]['url'])
-                                                #  gift_card_claim_code, gift_card_pin_code, gift_card_text, gift_image_url, error_meassage = get_claim_and_pin_codes(self.gift_card_data_file[inner_index]['url'])
-                                                #  purchase_url = self.gift_card_data_file[inner_index]['url']
-                                                # else:
+                                                
                                                 gift_card_claim_code, gift_card_pin_code, gift_card_text, gift_image_url, error_meassage, purchase_url = purchase_gift_card(gift_card_order_id, "alex@greetabl.com")
                                                 self.cursor.execute("""
                                                     INSERT INTO gift_tb (item_index, purchase_url, gift_card_claim_code, gift_card_pin_code, gift_card_text, gift_image_url)
@@ -369,28 +421,12 @@ class OrderFetcher(QtCore.QObject):
                                             if not downloaded_card_img:
                                              download_image(gift_image_url, temp_folder, "gift_card.png")
                                              downloaded_card_img = True
-                                            # download_image(gift_image_url, temp_folder, "gift_card.png")
-                                            if fulfillment_flag:
-                                                output_pdf = f"{order_folder}/#{order_num}__{index}-{item_quantity}-{inner_index + 1}.pdf"
-                                                create_pdf(gift_card_claim_code,gift_card_pin_code, gift_card_text, gift_image_url,gift_product_img_url, gift_product_title, gift_card_price, order_num, gift_card_title, output_pdf,outer_image_path, inner_image_path, user_custom_image,"",text_description,"", text_font , addon_img_url, addon_title)
-                                                self.errorMessage.emit(f"{order_folder}/#{order_num}__{index}-{item_quantity}-{inner_index + 1}.pdf created")
+                                      
                             
-                            if not fulfillment_flag:
-                                    for filename in os.listdir(f"{order_folder}"):
-                                        if f"{order_folder}/#{order_num}__{index}-{item_quantity}-" in filename and filename.endswith(".pdf"):
-                                            file_path = os.path.join(f"{order_folder}", filename)
-                                            try:
-                                                os.remove(file_path)
-                                                print(f"Deleted: {file_path}")
-                                            except Exception as e:
-                                                print(f"Error deleting {file_path}: {e}")
-                        else:
-                            # Create PDF with customization
                             if fulfillment_flag:
-                                output_pdf = f"{order_folder}/#{order_num}__{index}-{item_quantity}.pdf"
-                                create_pdf(gift_card_claim_code,gift_card_pin_code, gift_card_text, gift_image_url, gift_product_img_url, gift_product_title, gift_card_price, order_num, gift_card_title, output_pdf, outer_image_path, inner_image_path, user_custom_image,"", text_description,"", text_font , addon_img_url, addon_title)
-                                self.errorMessage.emit(f"{order_folder}/#{order_num}__{index}-{item_quantity}.pdf created")                       
-                            # print(f"PDF created: {output_pdf}")
+                                output_pdf = f"{order_folder}/#{order_num}__{index}-{item_quantity}-{inner_index + 1}.pdf"
+                                create_pdf(gift_card_claim_code,gift_card_pin_code, gift_card_text, gift_image_url,gift_product_img_url, gift_product_title, gift_card_price, order_num, gift_card_title, output_pdf,outer_image_path, inner_image_path, user_custom_image,text_to,text_description,text_from, text_font , addon_img_url, addon_title)
+                                self.errorMessage.emit(f"{order_folder}/#{order_num}__{index}-{item_quantity}-{inner_index + 1}.pdf created")
                 index += 1
 
             if properties_to_save.get("Print"):
@@ -516,8 +552,8 @@ class OrderFetcher(QtCore.QObject):
                 # print(f"PDF created: {output_pdf}")
                 
         # make fulfullment status as fulfilled
-        # if fulfillment_flag:
-        #     create_fulfillment(order_id)
+        if fulfillment_flag:
+            create_fulfillment(order_id)
         if fulfillment_flag:
           item_index = f"{order_num}__"
           item_index_pattern = f"{item_index}%"
