@@ -330,7 +330,8 @@ def create_pdf(gift_claim_code, gift_pin_code, gift_card_text, gift_card_img_url
         c.line(PAGE_WIDTH-63, 158, PAGE_WIDTH-224, 158)
         gift_card_price =  "$" + f"{round(float(gift_card_price))}" 
         gift_claim_code = "Claim: " + gift_claim_code
-        gift_pin_code = "PIN: " + gift_pin_code
+        if gift_pin_code != "":
+            gift_pin_code = "PIN: " + gift_pin_code
         draw_string_with_max_width(c, gift_card_title, PAGE_WIDTH -205, 165,font_size=15, max_width=160, rotate=True)
         draw_string_with_max_width(c, gift_card_price, PAGE_WIDTH -205, 330,font_size=14, max_width=160, font_name="Helvetica-Bold", rotate=True)
         draw_string_with_max_width(c, gift_claim_code, PAGE_WIDTH -188, 165,font_size=8, max_width=160, rotate=True)

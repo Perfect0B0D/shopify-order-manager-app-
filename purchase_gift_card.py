@@ -8,10 +8,20 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
+# test flag setting
 
-# Replace with your actual API Key and API Secret
-api_key = "9254a637-3062-4591-8159-0009565fb76d"
-api_secret = "Li!4yIzY3xK)r81"
+test_flag = True
+
+
+
+if test_flag:
+    api_key = "9254a637-3062-4591-8159-0009565fb76d"
+    api_secret = "Li!4yIzY3xK)r81"
+else:
+    api_key = "8b7d9974-4094-42c9-a71b-407145b72661"
+    api_secret = "u{Ow1tJ)UuJKi30"
+    
+    
 
 
 def generate_signature(api_key, api_secret):
@@ -38,7 +48,12 @@ def purchase_gift_card(shop_card_id, to_email):
 
     try:
         print(f"Sending purchase request for card ID {shop_card_id} to {to_email}...")
-        response = requests.post("https://apitest.gyft.com/mashery/v1/partner/purchase/gift_card_direct", 
+      
+        if test_flag:
+             response = requests.post("https://apitest.gyft.com/mashery/v1/partner/purchase/gift_card_direct", 
+                                 data=purchase_params, headers=headers)
+        else:
+             response = requests.post("https://api.gyft.com/mashery/v1/partner/purchase/gift_card_direct", 
                                  data=purchase_params, headers=headers)
 
         if response.status_code == 200:
